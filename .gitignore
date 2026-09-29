@@ -1,0 +1,45 @@
+# --- Godot (Floor 404) ---
+.godot/
+*.import.bak
+
+# Exported games / local builds
+export/
+build/
+dist/
+*.exe
+*.pck
+*.zip
+
+# Godot Android export (if used later)
+**/android/
+
+# --- OS & editors ---
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+.DS_Store
+._*
+
+# Personal editor settings (workspace file is committed)
+.vscode/
+*.swp
+*.swo
+*~
+
+# --- Blender ---
+*.blend1
+*.blend2
+
+# --- GIMP ---
+*#
+*.ggr~
+
+# --- Audacity ---
+*.au
+*.sox
+
+# --- Logs & temp ---
+*.log
+*.tmp
+.cache/

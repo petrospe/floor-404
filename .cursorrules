@@ -1,0 +1,14 @@
+# GODOT 4 GAME DEVELOPMENT RULES (FLOOR 404)
+
+Project Context:
+- Title: Floor 404 — The Null Pointer
+- Engine: Godot 4.x (GDScript)
+- Game Type: First-Person Liminal Space Walking Simulator (Backrooms Level 4 style)
+- Target Aesthetics: Atmospheric, abandoned corporate office, dark windows with thunder/rain outside.
+- Core Mechanics: WASD movement, Smooth Mouse Look, Interaction with doors/switches (E key), Instant Respawn Hazards, Elevator Teleports.
+- NO Monsters, NO HUD, NO Weapons, NO Visible Player Mesh.
+
+Coding Guidelines:
+1. Use strict Godot 4 syntax (@export, @onready, CharacterBody3D, Node3D, Area3D, RayCast3D). Do NOT use Godot 3 syntax.
+2. Code must be modular, well-commented, and optimized for performance.
+3. Keep scripts clean and readable. Use Signals for decoupling events (e.g. player_died, interact_triggered).

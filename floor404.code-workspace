@@ -1,0 +1,22 @@
+{
+  "folders": [
+    {
+      "name": "🎮 Floor 404 - Godot",
+      "path": "godot_project"
+    },
+    {
+      "name": "🎨 Raw Assets & Blender",
+      "path": "assets_src"
+    },
+    {
+      "name": "📄 Game Design & Docs",
+      "path": "docs"
+    }
+  ],
+  "settings": {
+    "godotTools.editorPath.godot4": "C:/Gamedev/Tools/Godot/Godot_v4.7.2-stable_win64.exe",
+    "files.exclude": {
+      "**/.godot": true
+    }
+  }
+}

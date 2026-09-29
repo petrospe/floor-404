@@ -1,0 +1,23 @@
+[gd_scene format=3 uid="uid://jl5rg85l0ahs"]
+
+[ext_resource type="PackedScene" uid="uid://bjicju3nyaixu" path="res://scenes/player.tscn" id="1_2venv"]
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_bpwie"]
+size = Vector3(20, 0.2, 20)
+
+[sub_resource type="BoxMesh" id="BoxMesh_bpwie"]
+size = Vector3(20, 0.2, 20)
+
+[node name="TestLevel" type="Node3D" unique_id=53678912]
+
+[node name="StaticBody3D" type="StaticBody3D" parent="." unique_id=2009949620]
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="StaticBody3D" unique_id=1877233553]
+shape = SubResource("BoxShape3D_bpwie")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="StaticBody3D" unique_id=3512934]
+mesh = SubResource("BoxMesh_bpwie")
+
+[node name="DirectionalLight3D" type="DirectionalLight3D" parent="." unique_id=1946377365]
+
+[node name="CharacterBody3D" parent="." unique_id=1269453398 instance=ExtResource("1_2venv")]

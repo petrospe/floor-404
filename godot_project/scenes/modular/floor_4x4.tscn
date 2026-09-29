@@ -1,0 +1,23 @@
+[gd_scene format=3 uid="uid://cmodfloor4x4a"]
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_floor"]
+albedo_color = Color(0.42, 0.43, 0.45, 1)
+roughness = 0.9
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_floor"]
+size = Vector3(4, 0.2, 4)
+
+[node name="Floor4x4" type="Node3D"]
+
+[node name="Mesh" type="CSGBox3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2, -0.1, 2)
+use_collision = false
+size = Vector3(4, 0.2, 4)
+material = SubResource("StandardMaterial3D_floor")
+
+[node name="Body" type="StaticBody3D" parent="." groups=["tile"]]
+metadata/floor_surface = "tile"
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Body"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2, -0.1, 2)
+shape = SubResource("BoxShape3D_floor")
