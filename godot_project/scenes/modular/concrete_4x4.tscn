@@ -1,0 +1,26 @@
+[gd_scene format=3 uid="uid://cmodconcrete4"]
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_concrete"]
+albedo_color = Color(0.28, 0.29, 0.3, 1)
+metallic = 0.18
+roughness = 0.38
+
+[sub_resource type="BoxMesh" id="BoxMesh_concrete"]
+size = Vector3(4, 0.2, 4)
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_concrete"]
+size = Vector3(4, 0.2, 4)
+
+[node name="Concrete4x4" type="Node3D"]
+
+[node name="Mesh" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2, -0.1, 2)
+mesh = SubResource("BoxMesh_concrete")
+surface_material_override/0 = SubResource("StandardMaterial3D_concrete")
+
+[node name="Body" type="StaticBody3D" parent="." groups=["concrete"]]
+metadata/floor_surface = "concrete"
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Body"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2, -0.1, 2)
+shape = SubResource("BoxShape3D_concrete")

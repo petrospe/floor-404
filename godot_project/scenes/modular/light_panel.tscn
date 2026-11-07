@@ -1,0 +1,17 @@
+[gd_scene format=3 uid="uid://cmodlightpan1"]
+
+[ext_resource type="PackedScene" path="res://models/office/light_panel.glb" id="1_mesh"]
+
+[node name="LightPanel" type="Node3D"]
+
+[node name="Mesh" parent="." instance=ExtResource("1_mesh")]
+
+[node name="Glow" type="OmniLight3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.1, 0)
+light_color = Color(0.9, 0.94, 0.86, 1)
+light_energy = 2.4
+light_indirect_energy = 0.6
+shadow_enabled = false
+shadow_bias = 0.08
+omni_range = 8.5
+omni_attenuation = 1.4

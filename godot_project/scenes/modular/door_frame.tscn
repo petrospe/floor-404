@@ -1,19 +1,8 @@
 [gd_scene format=3 uid="uid://cmoddoorframe"]
 
 [ext_resource type="Script" uid="uid://ck8km66nh7r8m" path="res://scripts/door.gd" id="1_door"]
-
-[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_frame"]
-albedo_color = Color(0.78, 0.76, 0.72, 1)
-roughness = 0.82
-
-[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_leaf"]
-albedo_color = Color(0.3, 0.26, 0.22, 1)
-roughness = 0.7
-
-[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_handle"]
-albedo_color = Color(0.72, 0.66, 0.4, 1)
-metallic = 0.6
-roughness = 0.35
+[ext_resource type="PackedScene" path="res://models/office/door_frame.glb" id="2_frame"]
+[ext_resource type="PackedScene" path="res://models/office/door_leaf.glb" id="3_leaf"]
 
 [sub_resource type="BoxShape3D" id="BoxShape3D_jamb"]
 size = Vector3(1.4, 3, 0.2)
@@ -26,18 +15,7 @@ size = Vector3(1.12, 2.32, 0.05)
 
 [node name="DoorFrame" type="Node3D"]
 
-[node name="Frame" type="CSGBox3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2, 1.5, 0)
-use_collision = false
-size = Vector3(4, 3, 0.2)
-material = SubResource("StandardMaterial3D_frame")
-
-[node name="Opening" type="CSGBox3D" parent="Frame"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.35, 0)
-operation = 2
-use_collision = false
-size = Vector3(1.2, 2.5, 0.6)
-material = SubResource("StandardMaterial3D_frame")
+[node name="Frame" parent="." instance=ExtResource("2_frame")]
 
 [node name="FrameBody" type="StaticBody3D" parent="."]
 
@@ -58,17 +36,7 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.44, 0, 0)
 sync_to_physics = true
 script = ExtResource("1_door")
 
-[node name="Leaf" type="CSGBox3D" parent="Door"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.56, 1.18, 0)
-use_collision = false
-size = Vector3(1.12, 2.32, 0.05)
-material = SubResource("StandardMaterial3D_leaf")
-
-[node name="Handle" type="CSGBox3D" parent="Door"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.02, 1.05, 0.035)
-use_collision = false
-size = Vector3(0.04, 0.14, 0.04)
-material = SubResource("StandardMaterial3D_handle")
+[node name="Leaf" parent="Door" instance=ExtResource("3_leaf")]
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="Door"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.56, 1.18, 0)

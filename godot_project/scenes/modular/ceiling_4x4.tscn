@@ -1,0 +1,7 @@
+[gd_scene format=3 uid="uid://cmodceiling4x"]
+
+[ext_resource type="PackedScene" path="res://models/office/ceiling_4x4.glb" id="1_mesh"]
+
+[node name="Ceiling4x4" type="Node3D"]
+
+[node name="Mesh" parent="." instance=ExtResource("1_mesh")]

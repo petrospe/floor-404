@@ -1,0 +1,16 @@
+[gd_scene format=3 uid="uid://cmodwindowwl1"]
+
+[ext_resource type="PackedScene" path="res://models/office/window_wall.glb" id="1_mesh"]
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_wall"]
+size = Vector3(4, 3, 0.2)
+
+[node name="WindowWall" type="Node3D"]
+
+[node name="Mesh" parent="." instance=ExtResource("1_mesh")]
+
+[node name="Body" type="StaticBody3D" parent="."]
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Body"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2, 1.5, 0)
+shape = SubResource("BoxShape3D_wall")

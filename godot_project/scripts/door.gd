@@ -39,7 +39,6 @@ var _target_open: bool = false
 
 
 func _ready() -> void:
-	super._ready()
 	_pivot = _resolve_pivot()
 	_audio = _resolve_audio()
 	_closed_basis = _pivot.basis

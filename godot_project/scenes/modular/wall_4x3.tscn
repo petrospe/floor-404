@@ -1,19 +1,13 @@
 [gd_scene format=3 uid="uid://cmodwall4x3aa"]
 
-[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_wall"]
-albedo_color = Color(0.78, 0.76, 0.72, 1)
-roughness = 0.82
+[ext_resource type="PackedScene" path="res://models/office/wall_4x3.glb" id="1_mesh"]
 
 [sub_resource type="BoxShape3D" id="BoxShape3D_wall"]
 size = Vector3(4, 3, 0.2)
 
 [node name="Wall4x3" type="Node3D"]
 
-[node name="Mesh" type="CSGBox3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2, 1.5, 0)
-use_collision = false
-size = Vector3(4, 3, 0.2)
-material = SubResource("StandardMaterial3D_wall")
+[node name="Mesh" parent="." instance=ExtResource("1_mesh")]
 
 [node name="Body" type="StaticBody3D" parent="."]
 

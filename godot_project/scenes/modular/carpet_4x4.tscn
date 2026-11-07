@@ -1,0 +1,17 @@
+[gd_scene format=3 uid="uid://cmodcarpet4x4"]
+
+[ext_resource type="PackedScene" path="res://models/office/carpet_4x4.glb" id="1_mesh"]
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_carpet"]
+size = Vector3(4, 0.2, 4)
+
+[node name="Carpet4x4" type="Node3D"]
+
+[node name="Mesh" parent="." instance=ExtResource("1_mesh")]
+
+[node name="Body" type="StaticBody3D" parent="." groups=["carpet"]]
+metadata/floor_surface = "carpet"
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Body"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2, -0.1, 2)
+shape = SubResource("BoxShape3D_carpet")
