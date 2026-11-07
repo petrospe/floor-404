@@ -20,6 +20,14 @@ roughness = 0.72
 [sub_resource type="BoxMesh" id="BoxMesh_seal"]
 size = Vector3(1.32, 2.5, 0.03)
 
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_handle"]
+albedo_color = Color(0.62, 0.63, 0.66, 1)
+metallic = 0.82
+roughness = 0.32
+
+[sub_resource type="BoxMesh" id="BoxMesh_handle"]
+size = Vector3(0.1, 0.1, 0.04)
+
 [node name="DoorFrame" type="Node3D"]
 
 [node name="Frame" parent="." instance=ExtResource("2_frame")]
@@ -44,6 +52,11 @@ sync_to_physics = true
 script = ExtResource("1_door")
 
 [node name="Leaf" parent="Door" instance=ExtResource("3_leaf")]
+
+[node name="HandleBack" type="MeshInstance3D" parent="Door"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.01, 1.03, -0.04)
+mesh = SubResource("BoxMesh_handle")
+surface_material_override/0 = SubResource("StandardMaterial3D_handle")
 
 [node name="Seal" type="MeshInstance3D" parent="Door"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.56, 1.24, -0.02)

@@ -10,7 +10,7 @@ var _left_closed := Vector3.ZERO
 var _right_closed := Vector3.ZERO
 
 
-func build(floor_number: String, show_mark: bool) -> void:
+func build(floor_number: String) -> void:
 	var steel := _material(Color(0.74, 0.75, 0.77), 0.22, 0.82)
 	var trim := _material(Color(0.55, 0.56, 0.58), 0.4, 0.65)
 	var wall := _material(Color(0.62, 0.63, 0.65), 0.7, 0.15)
@@ -27,7 +27,6 @@ func build(floor_number: String, show_mark: bool) -> void:
 	_right = _mesh(Vector3(2.4, 1.18, 0.02), Vector3(0.86, 2.32, 0.05), steel)
 	_left_closed = _left.position
 	_right_closed = _right.position
-	_mesh(Vector3(2.0, 1.18, 0.03), Vector3(0.012, 2.2, 0.01), dark)
 	_shape(Vector3(0.58, 1.5, 0.0), Vector3(1.16, 3.0, 0.16))
 	_shape(Vector3(3.42, 1.5, 0.0), Vector3(1.16, 3.0, 0.16))
 	_shape(Vector3(2.0, 2.72, 0.0), Vector3(1.7, 0.56, 0.16))
@@ -64,18 +63,6 @@ func build(floor_number: String, show_mark: bool) -> void:
 	number.outline_size = 0
 	number.rotation.y = PI
 	add_child(number)
-
-	if show_mark:
-		var mark := Label3D.new()
-		mark.text = "if"
-		mark.position = Vector3(2.0, 1.55, -0.045)
-		mark.pixel_size = 0.0035
-		mark.font_size = 42
-		mark.modulate = Color(0.05, 0.05, 0.05)
-		mark.outline_size = 6
-		mark.outline_modulate = Color(0.9, 0.9, 0.9)
-		mark.rotation.y = PI
-		add_child(mark)
 
 
 func force_open() -> void:

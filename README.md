@@ -52,6 +52,14 @@ The Godot project root is the folder that already contains `project.godot`:
 C:/projects/floor-404/godot_project
 ```
 
+From PowerShell, this opens the editor on that project:
+
+```powershell
+& "C:\Gamedev\Tools\Godot\Godot_v4.7.2-stable_win64.exe" --path "C:\projects\floor-404\godot_project"
+```
+
+Change the executable path if Godot is installed somewhere else. Inside the editor, **F5** runs the game. The main scene is `scenes/office_level.tscn`.
+
 In the Project Manager:
 
 1. Click **Import**.
@@ -72,12 +80,13 @@ After the editor opens, `scripts/` and `scenes/` show up in the FileSystem dock.
 
 ## 3. Run a scene
 
-`project.godot` does not set a main scene yet. To play:
+`project.godot` sets the main scene to `scenes/office_level.tscn`. Press **F5** to walk the office.
 
-1. Open `scenes/test_level.tscn`.
-2. Press **F6** to run the current scene, or assign it as the main scene under **Project → Project Settings → Application → Run → Main Scene** and press **F5**.
+`scenes/test_level.tscn` is still there: a flat floor with `scenes/player.tscn`. Open it and press **F6** to run that scene alone.
 
-`scenes/test_level.tscn` instances `scenes/player.tscn` on a flat test floor.
+`scripts/office_level.gd` builds the floor at runtime from the 4 m kit. The south end keeps the original corridor, break room, cubicles, security room, and stair. North of that are more offices, a stairwell, two linked elevators, a server room, a meeting room, and a small room with an old CRT desk.
+
+Corridors stay empty. Of the other rooms, half are completely bare and half contain one cluster: a lone chair, a desk, a CRT with a tower, a cubicle, folding chairs, or a ladder.
 
 ### Controls
 
@@ -98,7 +107,10 @@ Movement speed, mouse sensitivity, and interaction distance are exported on the 
 
 | File | Node | Purpose |
 |---|---|---|
+| `scripts/office_level.gd` | `Node3D` | Builds the office floor, rooms, and props |
 | `scripts/player.gd` | `CharacterBody3D` | Walk, mouse look, head bob, interaction ray, footsteps |
+| `scripts/elevator_doors.gd` | `StaticBody3D` | Sliding elevator doors |
+| `scripts/elevator_panel.gd` | `StaticBody3D` | Floor buttons. E rides to the other car |
 | `scripts/interactable.gd` | `Node3D` | Base `interact()` used by the ray |
 | `scripts/door.gd` | `Node3D` or `AnimatableBody3D` | Hinged or sliding door, optional lock, open/close audio |
 | `scripts/checkpoint_zone.gd` | `Area3D` | Saves `player.last_safe_transform` on enter |
@@ -117,7 +129,7 @@ Scenes in `scenes/modular/` use a **4 meter grid**. Each prefab's origin is the 
 | `wall_4x3.tscn` | 4 m wide, 3 m tall, 0.2 m thick | Sits on the local z = 0 edge. Rotate Y by 90° for a wall along Z. |
 | `door_frame.tscn` | Same footprint as the wall | 1.2 × 2.4 m opening. The `Door` node uses `door.gd` and opens with E. |
 
-These pieces are `CSGBox3D` blockouts plus collision shapes, so a level can be walked before final art exists. Replace the CSG meshes with imported models when the kit is ready. Keep the same origins so the grid still lines up.
+`scenes/modular/` also has carpet, concrete, ceiling, wall, window, and light-panel scenes. The playable floor instances the exported glTF kit in `models/office/` (`carpet_4x4.glb`, `wall_4x3.glb`, `door_frame.glb`, `door_leaf.glb`, and the prop meshes). Door leaves have a handle on each face. Keep the same origins if you replace a mesh, so the 4 m grid still lines up.
 
 ### Door audio
 
@@ -200,3 +212,21 @@ godot_project/assets/audio/ambient/
 - Death is an instant respawn at the last checkpoint, with a short black fade and no loading screen.
 - Hazards are environmental: exposed wiring, missing floors, empty elevator shafts. Nothing hunts the player.
 - Windows look onto darkness. Rain and thunder stay outside.
+
+## What is on the floor
+
+The layout is generated, not painted into `office_level.tscn`. Rooms worth knowing:
+
+| Place | What you find |
+|---|---|
+| Break room | Tables, water cooler, glass-front fridge stocked with cans, bottles, sandwiches, and chocolate. The fridge sits on the north wall, off the door. |
+| Cubicle bays | Partition stalls with a CRT, keyboard, and a wheeled chair. The north bay stays inside its walls and clear of the west door. |
+| Column room | One wheeled chair in the open floor. |
+| Security | Desk with beige CRT monitors and a desktop tower. |
+| Stairs | Climbable flight to a red door, plus a taller concrete stairwell. |
+| Elevators | Two cars in different wings. E on the doors opens them. E on the 15-button panel rides to the other car. |
+| Server room | Black racks, blue status lights, one bay lit red. Concrete floor. West side of the north wing. |
+| Meeting room | Long table, wheeled chairs, a large screen on the east wall. |
+| CRT room | One desk: beige monitor, keyboard, mouse, tower, and a printer. |
+
+Reference photos live in `docs/reference/level4/`.
