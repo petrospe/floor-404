@@ -3,9 +3,10 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://dcr4ebfwkopdg"
-path="res://.godot/imported/cubicle_wood.png-9705d5fe5dc625e663476542150ffb95.ctex"
+path.s3tc="res://.godot/imported/cubicle_wood.png-9705d5fe5dc625e663476542150ffb95.s3tc.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "8741eee8a3ba3987c8f4e3aa71d43c52"
@@ -14,11 +15,11 @@ generator_parameters={
 [deps]
 
 source_file="res://models/office/cubicle_wood.png"
-dest_files=["res://.godot/imported/cubicle_wood.png-9705d5fe5dc625e663476542150ffb95.ctex"]
+dest_files=["res://.godot/imported/cubicle_wood.png-9705d5fe5dc625e663476542150ffb95.s3tc.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0
@@ -40,4 +41,4 @@ process/normal_map_invert_y=false
 process/hdr_as_srgb=false
 process/hdr_clamp_exposure=false
 process/size_limit=0
-detect_3d/compress_to=1
+detect_3d/compress_to=0

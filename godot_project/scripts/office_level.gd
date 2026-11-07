@@ -1,7 +1,6 @@
 extends Node3D
-## First walkable slice of Floor 404, laid out after the Level 4 office references.
-## Rooms, in walk order: carpet corridor, door hall with night windows, closets,
-## break room, cubicle bay, column room, service corridor, security room, stair landing.
+## Walkable floor of Floor 404. The original rooms stay at the south end, and a
+## larger wing of offices, a stairwell, and two elevators continues north.
 ## Modules are 4 m on a side. Walls are 3 m tall. The player starts in the corridor.
 
 const CELL := 4.0
@@ -17,11 +16,14 @@ const LIGHT := preload("res://scenes/modular/light_panel.tscn")
 const CUBICLE := preload("res://models/office/cubicle.glb")
 const COLUMN := preload("res://models/office/column.glb")
 const TABLE := preload("res://models/office/table.glb")
-const CHAIR := preload("res://models/office/chair.glb")
+const ELEVATOR_DOORS := preload("res://scripts/elevator_doors.gd")
+const ELEVATOR_PANEL := preload("res://scripts/elevator_panel.gd")
 
 var _cells: Array[Vector2i] = []
 var _cell_set: Dictionary = {}
 var _concrete: Dictionary = {}
+var _expansion: Dictionary = {}
+var _tall: Dictionary = {}
 var _overrides: Dictionary = {}
 var _door_flags: Dictionary = {}
 var _geometry: Node3D
@@ -74,7 +76,10 @@ func _define_rooms() -> void:
 	_fill(0, 0, 17, 18) # Stair room.
 	_fill(-2, -2, 14, 17) # Service corridor.
 	_fill(-4, -3, 15, 17) # Security room.
+	_expand_floor()
 	for cell in _cells:
+		if _expansion.has(cell):
+			continue
 		if cell.x <= -2:
 			_concrete[cell] = true
 
@@ -111,7 +116,9 @@ func _build_shell() -> void:
 		var origin := Vector3(cell.x * CELL, 0.0, cell.y * CELL)
 		var floor_scene: PackedScene = CONCRETE if _concrete.has(cell) else CARPET
 		_add(floor_scene, origin)
-		_add(CEILING, origin)
+		var ceiling := _add(CEILING, origin)
+		if _tall.has(cell):
+			ceiling.position.y += 2.6
 
 	var placed: Dictionary = {}
 	for cell in _cells:
@@ -133,6 +140,8 @@ func _build_shell() -> void:
 					_place_module(WINDOW, canon_cell, canon_edge)
 				"door":
 					_place_door(canon_cell, canon_edge, key)
+				"elevator":
+					pass
 				_:
 					pass
 
@@ -142,14 +151,21 @@ func _build_lights() -> void:
 		var mode := _light_mode(cell)
 		if mode == 0:
 			continue
+		var fixture_y := 5.3 if _tall.has(cell) else 2.9
 		var panel := LIGHT.instantiate() as Node3D
-		panel.position = Vector3(cell.x * CELL + 2.0, 2.9, cell.y * CELL + 2.0)
+		panel.position = Vector3(cell.x * CELL + 2.0, fixture_y, cell.y * CELL + 2.0)
 		_geometry.add_child(panel)
 		var glow := panel.get_node(^"Glow") as OmniLight3D
 		if mode == 2:
 			glow.visible = false
 			_dim_emissive(panel)
 			continue
+		var on_grid := posmod(cell.x, 3) == 0 and posmod(cell.y, 3) == 0
+		if mode != 3 and not _tall.has(cell) and not on_grid:
+			glow.visible = false
+			continue
+		glow.omni_range = 14.0
+		glow.light_energy = 1.8
 		if mode == 3:
 			glow.shadow_enabled = true
 		if _region_of(cell) == &"service" or _region_of(cell) == &"security":
@@ -179,6 +195,9 @@ func _build_props() -> void:
 	_security_camera(Vector3(7.55, 2.45, 62.0))
 	_security_room()
 	_stair()
+	_stairwell()
+	_extra_rooms()
+	_build_elevators()
 
 
 func _break_room() -> void:
@@ -225,15 +244,16 @@ func _security_room() -> void:
 func _stair() -> void:
 	var rise := 0.1
 	var depth := 0.32
+	var tread := _mat(Color(0.35, 0.35, 0.36), 0.7)
 	for i in range(8):
 		var top := rise * float(i + 1)
-		_solid(
-			"Step",
-			Vector3(2.0, top - rise * 0.5, 69.2 + float(i) * depth),
-			Vector3(2.1, rise, depth),
-			_mat(Color(0.35, 0.35, 0.36), 0.7)
-		)
-	_solid("Landing", Vector3(2.0, 0.7, 73.5), Vector3(3.4, 0.2, 4.0), _mat(Color(0.32, 0.32, 0.33), 0.65))
+		var z := 69.2 + float(i) * depth
+		_decor("Step", Vector3(2.0, top - rise * 0.5, z), Vector3(2.1, rise, depth), tread)
+		_decor("StepSide", Vector3(0.475, top * 0.5, z), Vector3(0.95, top, depth), tread)
+		_decor("StepSide", Vector3(3.525, top * 0.5, z), Vector3(0.95, top, depth), tread)
+	# Slope, then a flat landing. No riser collision, so the capsule can walk up.
+	_flight(0.2, 3.8, 69.0, 0.05, 71.55, 0.8, 75.85)
+	_decor("Landing", Vector3(2.0, 0.4, 73.75), Vector3(4.0, 0.8, 4.4), _mat(Color(0.32, 0.32, 0.33), 0.65))
 	_solid("RedDoor", Vector3(2.0, 1.8, 75.55), Vector3(1.15, 2.0, 0.08), _red_mat)
 	_solid("RedHandle", Vector3(2.42, 1.74, 75.48), Vector3(0.08, 0.08, 0.06), _metal_mat)
 
@@ -252,16 +272,18 @@ func _light_mode(cell: Vector2i) -> int:
 		&"pillar":
 			return 1 if cell == Vector2i(0, 15) else 0
 		&"stair":
-			return 1 if cell.y == 17 else 0
+			return 1
 		&"service":
 			return 1
-		&"security":
-			return 1 if cell == Vector2i(-3, 16) else 0
+		&"security", &"expansion":
+			return 1
 		_:
 			return 0
 
 
 func _region_of(cell: Vector2i) -> StringName:
+	if _expansion.has(cell):
+		return &"expansion"
 	if cell.x <= -3:
 		return &"security"
 	if cell.x == -2:
@@ -279,6 +301,332 @@ func _region_of(cell: Vector2i) -> StringName:
 	if cell.x == 0:
 		return &"corridor"
 	return &"closet"
+
+
+func _expand_floor() -> void:
+	var before := _cell_set.duplicate()
+	# Link off the first corridor, then a long east artery into the north wing.
+	_fill(1, 1, 1, 1)
+	_fill(2, 5, 0, 5)
+	_fill(6, 6, 2, 2)
+	_fill(4, 7, 6, 18)
+	_fill(-6, 7, 19, 56)
+	for cell in _cells:
+		if not before.has(cell):
+			_expansion[cell] = true
+	_mark(Vector2i(0, 18), "n", "wall")
+	_mark_door(Vector2i(0, 1), "e")
+	_mark(Vector2i(1, 1), "n", "wall")
+	_partition_south_offices()
+	_partition_east_artery()
+	_partition_north_wing()
+	_carve_stairwell()
+	_carve_cubicle_bay()
+	_mark_door(Vector2i(3, 7), "e")
+	_mark(Vector2i(3, 6), "e", "wall")
+	_mark(Vector2i(3, 8), "e", "wall")
+	for z in [22, 23, 30, 31, 44, 45]:
+		_mark(Vector2i(-6, z), "w", "window")
+	for x in [5, 6]:
+		for z in [40, 41, 42]:
+			_tall[Vector2i(x, z)] = true
+	_mark(Vector2i(-6, 49), "n", "wall")
+	_mark(Vector2i(-6, 50), "n", "wall")
+	_mark(Vector2i(-6, 50), "e", "elevator")
+
+
+func _partition_south_offices() -> void:
+	for z in [0, 1, 3, 4, 5]:
+		_mark(Vector2i(2, z), "e", "wall")
+	for x in [2, 3, 4]:
+		_mark(Vector2i(x, 2), "e", "none")
+	_mark(Vector2i(5, 2), "e", "elevator")
+	for z in [1, 3, 4]:
+		for x in [3, 4, 5]:
+			_mark(Vector2i(x, z), "n", "wall")
+	for x in [2, 3, 5]:
+		_mark(Vector2i(x, 5), "n", "wall")
+
+
+func _partition_east_artery() -> void:
+	for z in range(6, 19):
+		if (z + 1) % 3 == 0:
+			for x in [5, 6, 7]:
+				_mark(Vector2i(x, z), "n", "wall")
+		if z % 3 == 0:
+			_mark_door(Vector2i(4, z), "e")
+		else:
+			_mark(Vector2i(4, z), "e", "wall")
+		if z % 3 == 1:
+			_mark_door(Vector2i(5, z), "e")
+		else:
+			_mark(Vector2i(5, z), "e", "wall")
+
+
+func _partition_north_wing() -> void:
+	for z in range(19, 56):
+		if (z + 1) % 4 == 0:
+			for x in range(-6, 8):
+				if x == 0 or x == 1 or x == 4:
+					continue
+				_mark(Vector2i(x, z), "n", "wall")
+	for z in range(19, 57):
+		if z % 4 == 1:
+			_mark_door(Vector2i(1, z), "e")
+		else:
+			_mark(Vector2i(1, z), "e", "wall")
+		if z % 4 == 3:
+			_mark_door(Vector2i(-1, z), "e")
+			_mark_door(Vector2i(3, z), "e")
+		else:
+			_mark(Vector2i(-1, z), "e", "wall")
+			_mark(Vector2i(3, z), "e", "wall")
+		if z % 4 == 1:
+			_mark_door(Vector2i(4, z), "e")
+		else:
+			_mark(Vector2i(4, z), "e", "wall")
+		if z % 4 == 2:
+			_mark_door(Vector2i(-4, z), "e")
+		else:
+			_mark(Vector2i(-4, z), "e", "wall")
+		if z % 5 == 0:
+			_mark_door(Vector2i(5, z), "e")
+		else:
+			_mark(Vector2i(5, z), "e", "wall")
+
+
+func _carve_stairwell() -> void:
+	_mark_door(Vector2i(4, 40), "e")
+	_mark(Vector2i(4, 41), "e", "wall")
+	_mark(Vector2i(4, 42), "e", "wall")
+	for z in [40, 41, 42]:
+		_mark(Vector2i(5, z), "e", "none")
+		_mark(Vector2i(6, z), "e", "wall")
+	_mark(Vector2i(5, 42), "n", "wall")
+	_mark(Vector2i(6, 42), "n", "wall")
+	_mark(Vector2i(5, 39), "n", "wall")
+	_mark(Vector2i(6, 39), "n", "wall")
+
+
+func _carve_cubicle_bay() -> void:
+	_mark_door(Vector2i(4, 47), "e")
+	for z in range(46, 50):
+		_mark(Vector2i(5, z), "e", "none")
+		_mark(Vector2i(6, z), "e", "none")
+		for x in [5, 6, 7]:
+			_mark(Vector2i(x, z), "n", "none")
+	for x in [5, 6, 7]:
+		_mark(Vector2i(x, 45), "n", "wall")
+		_mark(Vector2i(x, 49), "n", "wall")
+
+
+func _stairwell() -> void:
+	var concrete := _mat(Color(0.78, 0.77, 0.74), 0.62)
+	var beige := _mat(Color(0.73, 0.69, 0.6), 0.78)
+	var rail := _mat(Color(0.16, 0.16, 0.17), 0.4, 0.65)
+	var x0 := 20.45
+	var x1 := 23.7
+	var z0 := 164.2
+	var z1 := 169.4
+	var rise := 2.2
+	var count := 11
+	var depth := (z1 - z0) / float(count)
+	for i in range(count):
+		var top := rise * float(i + 1) / float(count)
+		var z := z0 + (float(i) + 0.5) * depth
+		_decor("WellStep", Vector3((x0 + x1) * 0.5, top - rise / float(count) * 0.5, z), Vector3(x1 - x0, rise / float(count), depth), concrete)
+	var land_z := (z1 + 171.85) * 0.5
+	var land_depth := 171.85 - z1
+	_decor("WellLanding", Vector3((x0 + x1) * 0.5, rise * 0.5, land_z), Vector3(x1 - x0, rise, land_depth), concrete)
+	_solid("WellLanding", Vector3((x1 + 27.8) * 0.5, rise * 0.5, land_z), Vector3(27.8 - x1, rise, land_depth), concrete)
+	_flight(x0, x1, z0, 0.05, z1, rise, 171.85)
+	_solid("WellDoor", Vector3(24.0, rise + 1.0, 171.78), Vector3(1.2, 2.0, 0.08), _red_mat)
+	_solid("WellHandle", Vector3(24.42, rise + 0.95, 171.7), Vector3(0.08, 0.08, 0.05), _metal_mat)
+	_rail_run(x1 + 0.08, z0, 0.15, z1, rise + 0.15, rail)
+	_solid("WellRailPost", Vector3(x1 + 0.08, rise + 0.55, 170.6), Vector3(0.05, 1.1, 0.05), rail)
+	_solid("WellRail", Vector3(25.6, rise + 0.95, 169.45), Vector3(3.6, 0.04, 0.04), rail)
+	for edge_z in [160.1, 171.9]:
+		_solid("WellUpper", Vector3(24.0, 4.3, edge_z), Vector3(8.0, 2.6, 0.16), beige)
+	_solid("WellUpper", Vector3(20.08, 4.3, 166.0), Vector3(0.16, 2.6, 12.0), beige)
+	_solid("WellUpper", Vector3(27.92, 4.3, 166.0), Vector3(0.16, 2.6, 12.0), beige)
+
+
+func _rail_run(x: float, z0: float, y0: float, z1: float, y1: float, material: Material) -> void:
+	var posts := 7
+	for i in range(posts + 1):
+		var t := float(i) / float(posts)
+		var z := lerpf(z0, z1, t)
+		var y := lerpf(y0, y1, t)
+		_solid("RailPost", Vector3(x, y + 0.45, z), Vector3(0.045, 0.9, 0.045), material)
+	_sloped_bar(x, z0, y0 + 0.42, z1, y1 + 0.42, material)
+	_sloped_bar(x, z0, y0 + 0.88, z1, y1 + 0.88, material)
+
+
+func _sloped_bar(x: float, z0: float, y0: float, z1: float, y1: float, material: Material) -> void:
+	_prop_index += 1
+	var body := StaticBody3D.new()
+	body.name = "Rail_%d" % _prop_index
+	var dz := z1 - z0
+	var dy := y1 - y0
+	body.position = Vector3(x, (y0 + y1) * 0.5, (z0 + z1) * 0.5)
+	body.rotation.x = -atan2(dy, dz)
+	var mesh_node := MeshInstance3D.new()
+	var box := BoxMesh.new()
+	box.size = Vector3(0.04, 0.04, sqrt(dz * dz + dy * dy))
+	mesh_node.mesh = box
+	mesh_node.material_override = material
+	body.add_child(mesh_node)
+	var collision := CollisionShape3D.new()
+	var shape := BoxShape3D.new()
+	shape.size = box.size
+	collision.shape = shape
+	body.add_child(collision)
+	_geometry.add_child(body)
+
+
+func _extra_rooms() -> void:
+	_table(Vector3(26.2, 0.0, 102.0))
+	_chair(Vector3(26.2, 0.0, 103.0), PI)
+	_chair(Vector3(25.4, 0.0, 101.4), PI * 0.5)
+	_table(Vector3(-14.0, 0.0, 114.0))
+	_chair(Vector3(-14.0, 0.0, 115.0), PI)
+	_chair(Vector3(-13.2, 0.0, 113.4), -PI * 0.5)
+	for row in range(3):
+		for col in range(3):
+			_cubicle(Vector3(20.6 + float(col) * 3.3, 0.0, 185.2 + float(row) * 3.5))
+
+
+func _build_elevators() -> void:
+	var first = ELEVATOR_DOORS.new()
+	first.name = "ElevatorA"
+	first.build("04", true)
+	_place_node(first, Vector2i(5, 2), "e")
+	var second = ELEVATOR_DOORS.new()
+	second.name = "ElevatorB"
+	second.build("05", false)
+	_place_node(second, Vector2i(-6, 50), "e")
+	var marker_a := _elevator_marker("RideA", Vector3(26.5, 0.05, 10.0), PI * 0.5)
+	var marker_b := _elevator_marker("RideB", Vector3(-22.5, 0.05, 202.0), -PI * 0.5)
+	_dress_car(Vector3(26.0, 0.0, 10.0), true)
+	_dress_car(Vector3(-22.0, 0.0, 202.0), false)
+	var panel_a = _elevator_panel(Vector3(27.75, 1.2, 10.4), Vector3(0.08, 0.5, 0.28))
+	var panel_b = _elevator_panel(Vector3(-23.75, 1.2, 202.4), Vector3(0.08, 0.5, 0.28))
+	panel_a.partner_marker = marker_b
+	panel_a.partner_doors = second
+	panel_b.partner_marker = marker_a
+	panel_b.partner_doors = first
+
+
+func _elevator_marker(label: String, at: Vector3, yaw: float) -> Node3D:
+	var marker := Node3D.new()
+	marker.name = label
+	marker.position = at
+	marker.rotation.y = yaw
+	_geometry.add_child(marker)
+	return marker
+
+
+func _elevator_panel(at: Vector3, size: Vector3):
+	var panel = ELEVATOR_PANEL.new()
+	panel.position = at
+	var plate := MeshInstance3D.new()
+	var box := BoxMesh.new()
+	box.size = size
+	plate.mesh = box
+	plate.material_override = _mat(Color(0.2, 0.45, 0.28), 0.4, 0.2, Color(0.15, 0.7, 0.35), 1.4)
+	panel.add_child(plate)
+	var shape := CollisionShape3D.new()
+	var collision := BoxShape3D.new()
+	collision.size = size
+	shape.shape = collision
+	panel.add_child(shape)
+	_geometry.add_child(panel)
+	return panel
+
+
+func _dress_car(center: Vector3, door_on_west: bool) -> void:
+	var wood := _mat(Color(0.66, 0.54, 0.38), 0.58)
+	var tile := _mat(Color(0.82, 0.82, 0.8), 0.35, 0.08)
+	_decor("CarFloor", center + Vector3(0.0, 0.02, 0.0), Vector3(3.5, 0.04, 3.5), tile)
+	_decor("CarSide", center + Vector3(0.0, 1.2, 1.72), Vector3(3.2, 2.35, 0.06), wood)
+	_decor("CarSide", center + Vector3(0.0, 1.2, -1.72), Vector3(3.2, 2.35, 0.06), wood)
+	var back := 1.72 if door_on_west else -1.72
+	_decor("CarBack", center + Vector3(back, 1.2, 0.0), Vector3(0.06, 2.35, 3.2), wood)
+	var lamp := OmniLight3D.new()
+	lamp.position = center + Vector3(0.0, 2.55, 0.0)
+	lamp.light_color = Color(0.95, 0.94, 0.88)
+	lamp.light_energy = 1.6
+	lamp.omni_range = 5.0
+	_geometry.add_child(lamp)
+	_decor("CarLamp", lamp.position, Vector3(1.2, 0.05, 0.35), _mat(Color(0.9, 0.9, 0.86), 0.4, 0.0, Color(0.95, 0.93, 0.85), 3.0))
+
+
+func _place_node(node: Node3D, cell: Vector2i, edge: String) -> void:
+	var pos := Vector3(cell.x * CELL, 0.0, cell.y * CELL)
+	var rot := 0.0
+	match edge:
+		"n":
+			pos.z += CELL
+		"s":
+			pos.x += CELL
+			rot = PI
+		"e":
+			pos.x += CELL
+			pos.z += CELL
+			rot = PI * 0.5
+		"w":
+			rot = -PI * 0.5
+	node.position = pos
+	node.rotation.y = rot
+	_geometry.add_child(node)
+
+
+func _flight(x0: float, x1: float, z0: float, y0: float, z_top: float, y_top: float, z_end: float) -> void:
+	_prop_index += 1
+	var body := StaticBody3D.new()
+	body.name = "Ramp_%d" % _prop_index
+	var shape := ConvexPolygonShape3D.new()
+	var bottom := minf(y0, y_top) - 0.25
+	shape.points = PackedVector3Array([
+		Vector3(x0, y0, z0), Vector3(x1, y0, z0),
+		Vector3(x0, y_top, z_top), Vector3(x1, y_top, z_top),
+		Vector3(x0, y_top, z_end), Vector3(x1, y_top, z_end),
+		Vector3(x0, bottom, z0), Vector3(x1, bottom, z0),
+		Vector3(x0, bottom, z_end), Vector3(x1, bottom, z_end),
+	])
+	var collision := CollisionShape3D.new()
+	collision.shape = shape
+	body.add_child(collision)
+	_geometry.add_child(body)
+
+
+func _decor(label: String, origin: Vector3, size: Vector3, material: Material) -> void:
+	_prop_index += 1
+	var mesh_node := MeshInstance3D.new()
+	mesh_node.name = "%s_%d" % [label, _prop_index]
+	mesh_node.position = origin
+	var box := BoxMesh.new()
+	box.size = size
+	mesh_node.mesh = box
+	mesh_node.material_override = material
+	_geometry.add_child(mesh_node)
+
+
+func _part(parent: Node3D, origin: Vector3, size: Vector3, material: Material) -> void:
+	var body := StaticBody3D.new()
+	body.position = origin
+	var mesh_node := MeshInstance3D.new()
+	var box := BoxMesh.new()
+	box.size = size
+	mesh_node.mesh = box
+	mesh_node.material_override = material
+	body.add_child(mesh_node)
+	var collision := CollisionShape3D.new()
+	var shape := BoxShape3D.new()
+	shape.size = size
+	collision.shape = shape
+	body.add_child(collision)
+	parent.add_child(body)
 
 
 func _fill(x0: int, x1: int, z0: int, z1: int) -> void:
@@ -322,10 +670,12 @@ func _place_module(packed: PackedScene, cell: Vector2i, edge: String, height: fl
 			pos.x += CELL
 			rot = PI
 		"e":
+			# The module extends 4 m toward -Z from its origin, so the origin sits
+			# on the north end of this cell's east edge.
 			pos.x += CELL
+			pos.z += CELL
 			rot = PI * 0.5
 		"w":
-			pos.z += CELL
 			rot = -PI * 0.5
 	node.position = pos
 	node.rotation.y = rot
@@ -353,9 +703,9 @@ func _place_door(cell: Vector2i, edge: String, key: String) -> void:
 			rot = PI
 		"e":
 			pos.x += CELL
+			pos.z += CELL
 			rot = PI * 0.5
 		"w":
-			pos.z += CELL
 			rot = -PI * 0.5
 	node.position = pos
 	node.rotation.y = rot
@@ -393,8 +743,18 @@ func _table(at: Vector3) -> void:
 	_prop(TABLE, at)
 
 
-func _chair(at: Vector3) -> void:
-	_prop(CHAIR, at)
+func _chair(at: Vector3, yaw: float = 0.0) -> void:
+	var root := Node3D.new()
+	root.name = "Chair"
+	root.position = at
+	root.rotation.y = yaw
+	_geometry.add_child(root)
+	var black := _mat(Color(0.07, 0.07, 0.08), 0.55)
+	_part(root, Vector3(0.0, 0.47, 0.0), Vector3(0.44, 0.05, 0.42), black)
+	_part(root, Vector3(0.0, 0.74, -0.19), Vector3(0.44, 0.48, 0.045), black)
+	for x in [-0.17, 0.17]:
+		for z in [-0.16, 0.16]:
+			_part(root, Vector3(x, 0.23, z), Vector3(0.028, 0.46, 0.028), _metal_mat)
 
 
 func _cubicle(at: Vector3) -> void:

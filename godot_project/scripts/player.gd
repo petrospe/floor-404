@@ -67,7 +67,8 @@ func _ready() -> void:
 		and InputMap.has_action(&"move_right")
 	)
 	_use_interact_action = InputMap.has_action(&"interact")
-	floor_snap_length = 0.15
+	floor_snap_length = 0.3
+	floor_max_angle = deg_to_rad(50.0)
 	_ensure_body()
 	_ensure_camera()
 	_ensure_interaction_ray()
@@ -79,6 +80,15 @@ func _ready() -> void:
 
 func is_respawning() -> bool:
 	return _respawning
+
+
+## Move the body to another floor plate, such as the far side of an elevator ride.
+func travel_to(target: Transform3D) -> void:
+	velocity = Vector3.ZERO
+	global_transform = target
+	last_safe_transform = target
+	_sync_physics_state(target)
+	reset_physics_interpolation()
 
 
 ## Freeze, fade out, place the body on last_safe_transform, then fade in.
