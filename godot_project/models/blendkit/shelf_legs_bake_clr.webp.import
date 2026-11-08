@@ -3,9 +3,10 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://ct45msr8fya4u"
-path="res://.godot/imported/shelf_legs_bake_clr.webp-fcc6fa8a560d21e62b68d56ff86b6019.ctex"
+path.s3tc="res://.godot/imported/shelf_legs_bake_clr.webp-fcc6fa8a560d21e62b68d56ff86b6019.s3tc.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "90c28d63b8d0a1bc9747c43a4a15155f"
@@ -14,11 +15,11 @@ generator_parameters={
 [deps]
 
 source_file="res://models/blendkit/shelf_legs_bake_clr.webp"
-dest_files=["res://.godot/imported/shelf_legs_bake_clr.webp-fcc6fa8a560d21e62b68d56ff86b6019.ctex"]
+dest_files=["res://.godot/imported/shelf_legs_bake_clr.webp-fcc6fa8a560d21e62b68d56ff86b6019.s3tc.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0
@@ -40,4 +41,4 @@ process/normal_map_invert_y=false
 process/hdr_as_srgb=false
 process/hdr_clamp_exposure=false
 process/size_limit=0
-detect_3d/compress_to=1
+detect_3d/compress_to=0

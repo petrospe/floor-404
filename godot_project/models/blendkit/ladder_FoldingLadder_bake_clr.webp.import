@@ -3,9 +3,10 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://2r5pcq7uhw8d"
-path="res://.godot/imported/ladder_FoldingLadder_bake_clr.webp-ceb2df1face9c87363d61c4ef2b2cb39.ctex"
+path.s3tc="res://.godot/imported/ladder_FoldingLadder_bake_clr.webp-ceb2df1face9c87363d61c4ef2b2cb39.s3tc.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "e3ce90f5d6815f2b1d60ef78c4d17e3a"
@@ -14,11 +15,11 @@ generator_parameters={
 [deps]
 
 source_file="res://models/blendkit/ladder_FoldingLadder_bake_clr.webp"
-dest_files=["res://.godot/imported/ladder_FoldingLadder_bake_clr.webp-ceb2df1face9c87363d61c4ef2b2cb39.ctex"]
+dest_files=["res://.godot/imported/ladder_FoldingLadder_bake_clr.webp-ceb2df1face9c87363d61c4ef2b2cb39.s3tc.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0
@@ -40,4 +41,4 @@ process/normal_map_invert_y=false
 process/hdr_as_srgb=false
 process/hdr_clamp_exposure=false
 process/size_limit=0
-detect_3d/compress_to=1
+detect_3d/compress_to=0

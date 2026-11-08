@@ -3,9 +3,10 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://ds12mioa2tqww"
-path="res://.godot/imported/office_chair_FabricLeatherBuffaloRustic001_GLOSS_1K.webp-6f48adb8587bbfd09d367fcafa0b3966.ctex"
+path.s3tc="res://.godot/imported/office_chair_FabricLeatherBuffaloRustic001_GLOSS_1K.webp-6f48adb8587bbfd09d367fcafa0b3966.s3tc.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "904da2641324b9be7da325cb1b81422d"
@@ -14,11 +15,11 @@ generator_parameters={
 [deps]
 
 source_file="res://models/blendkit/office_chair_FabricLeatherBuffaloRustic001_GLOSS_1K.webp"
-dest_files=["res://.godot/imported/office_chair_FabricLeatherBuffaloRustic001_GLOSS_1K.webp-6f48adb8587bbfd09d367fcafa0b3966.ctex"]
+dest_files=["res://.godot/imported/office_chair_FabricLeatherBuffaloRustic001_GLOSS_1K.webp-6f48adb8587bbfd09d367fcafa0b3966.s3tc.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0
@@ -40,4 +41,4 @@ process/normal_map_invert_y=false
 process/hdr_as_srgb=false
 process/hdr_clamp_exposure=false
 process/size_limit=0
-detect_3d/compress_to=1
+detect_3d/compress_to=0

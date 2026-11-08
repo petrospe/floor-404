@@ -59,6 +59,7 @@ const _SURFACE_GROUPS: Array[StringName] = [
 
 
 func _ready() -> void:
+	add_to_group(&"player")
 	_gravity = float(ProjectSettings.get_setting("physics/3d/default_gravity", 9.8))
 	_use_move_actions = (
 		InputMap.has_action(&"move_forward")

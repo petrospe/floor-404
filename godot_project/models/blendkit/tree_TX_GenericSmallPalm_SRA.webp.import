@@ -3,9 +3,10 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://cqdopigv84xaw"
-path="res://.godot/imported/tree_TX_GenericSmallPalm_SRA.webp-c42516424b0a23420392e160cc4129df.ctex"
+path.s3tc="res://.godot/imported/tree_TX_GenericSmallPalm_SRA.webp-c42516424b0a23420392e160cc4129df.s3tc.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "6596f77d74d360d436a11e5df4f151b6"
@@ -14,11 +15,11 @@ generator_parameters={
 [deps]
 
 source_file="res://models/blendkit/tree_TX_GenericSmallPalm_SRA.webp"
-dest_files=["res://.godot/imported/tree_TX_GenericSmallPalm_SRA.webp-c42516424b0a23420392e160cc4129df.ctex"]
+dest_files=["res://.godot/imported/tree_TX_GenericSmallPalm_SRA.webp-c42516424b0a23420392e160cc4129df.s3tc.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0
@@ -40,4 +41,4 @@ process/normal_map_invert_y=false
 process/hdr_as_srgb=false
 process/hdr_clamp_exposure=false
 process/size_limit=0
-detect_3d/compress_to=1
+detect_3d/compress_to=0

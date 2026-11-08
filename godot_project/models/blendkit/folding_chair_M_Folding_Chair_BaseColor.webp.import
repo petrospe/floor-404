@@ -3,9 +3,10 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://qof2r32noswg"
-path="res://.godot/imported/folding_chair_M_Folding_Chair_BaseColor.webp-453c43dde0aff065fa4377a2b7db6371.ctex"
+path.s3tc="res://.godot/imported/folding_chair_M_Folding_Chair_BaseColor.webp-453c43dde0aff065fa4377a2b7db6371.s3tc.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "b9bcdbde0d6262a1ebc317df17c4a6ed"
@@ -14,11 +15,11 @@ generator_parameters={
 [deps]
 
 source_file="res://models/blendkit/folding_chair_M_Folding_Chair_BaseColor.webp"
-dest_files=["res://.godot/imported/folding_chair_M_Folding_Chair_BaseColor.webp-453c43dde0aff065fa4377a2b7db6371.ctex"]
+dest_files=["res://.godot/imported/folding_chair_M_Folding_Chair_BaseColor.webp-453c43dde0aff065fa4377a2b7db6371.s3tc.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0
@@ -40,4 +41,4 @@ process/normal_map_invert_y=false
 process/hdr_as_srgb=false
 process/hdr_clamp_exposure=false
 process/size_limit=0
-detect_3d/compress_to=1
+detect_3d/compress_to=0

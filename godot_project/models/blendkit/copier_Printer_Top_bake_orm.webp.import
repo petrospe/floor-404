@@ -3,9 +3,10 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://0g78tqnu7y6l"
-path="res://.godot/imported/copier_Printer_Top_bake_orm.webp-7f83dcfc5ee8f9986cf93d78da7e5cc9.ctex"
+path.s3tc="res://.godot/imported/copier_Printer_Top_bake_orm.webp-7f83dcfc5ee8f9986cf93d78da7e5cc9.s3tc.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "7be4744b47750602b6172b4d70f6664e"
@@ -14,11 +15,11 @@ generator_parameters={
 [deps]
 
 source_file="res://models/blendkit/copier_Printer_Top_bake_orm.webp"
-dest_files=["res://.godot/imported/copier_Printer_Top_bake_orm.webp-7f83dcfc5ee8f9986cf93d78da7e5cc9.ctex"]
+dest_files=["res://.godot/imported/copier_Printer_Top_bake_orm.webp-7f83dcfc5ee8f9986cf93d78da7e5cc9.s3tc.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0
@@ -40,4 +41,4 @@ process/normal_map_invert_y=false
 process/hdr_as_srgb=false
 process/hdr_clamp_exposure=false
 process/size_limit=0
-detect_3d/compress_to=1
+detect_3d/compress_to=0
