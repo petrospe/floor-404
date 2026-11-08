@@ -2574,36 +2574,75 @@ func _cabinet_wall(cell: Vector2i) -> String:
 	return ""
 
 
-func _paint_white_cabinet(root: Node) -> void:
+func _paint_white_cabinet(root: Node3D) -> void:
 	var pending: Array[Node] = [root]
 	while not pending.is_empty():
 		var node: Node = pending.pop_back()
 		if node is MeshInstance3D:
 			var mesh_node := node as MeshInstance3D
+			var albedo := Color(0.75, 0.76, 0.77) if _is_drawer_face(root, mesh_node) else Color(0.94, 0.94, 0.95)
 			if mesh_node.mesh != null:
 				for surface in mesh_node.mesh.get_surface_count():
 					var current := mesh_node.get_active_material(surface)
-					if current is StandardMaterial3D:
-						mesh_node.set_surface_override_material(surface, _white_cabinet_finish(current as StandardMaterial3D))
+					if current is BaseMaterial3D:
+						mesh_node.set_surface_override_material(surface, _cabinet_finish(current as BaseMaterial3D, albedo))
+			if mesh_node.material_override is BaseMaterial3D:
+				mesh_node.material_override = _cabinet_finish(mesh_node.material_override as BaseMaterial3D, albedo)
 		for child in node.get_children():
 			pending.append(child)
 
 
-func _white_cabinet_finish(source: StandardMaterial3D) -> StandardMaterial3D:
-	var copy := source.duplicate() as StandardMaterial3D
+func _is_drawer_face(cabinet: Node3D, mesh_node: MeshInstance3D) -> bool:
+	if mesh_node.mesh == null:
+		return false
+	var ab := mesh_node.get_aabb()
+	var to_cabinet := cabinet.global_transform.affine_inverse() * mesh_node.global_transform
+	var min_z := 1000.0
+	var max_z := -1000.0
+	for i in 8:
+		var corner := Vector3(
+			ab.position.x if (i & 1) == 0 else ab.end.x,
+			ab.position.y if (i & 2) == 0 else ab.end.y,
+			ab.position.z if (i & 4) == 0 else ab.end.z
+		)
+		var z := (to_cabinet * corner).z
+		min_z = minf(min_z, z)
+		max_z = maxf(max_z, z)
+	# The drawer fronts are the thin sheets on the +Z side. The label texture on them is transparent.
+	return max_z - min_z < 0.05 and max_z > 0.25
+
+
+func _cabinet_finish(source: BaseMaterial3D, albedo: Color) -> BaseMaterial3D:
+	var copy := source.duplicate() as BaseMaterial3D
 	copy.transparency = BaseMaterial3D.TRANSPARENCY_DISABLED
-	copy.albedo_color = Color(0.94, 0.94, 0.95)
+	copy.albedo_color = albedo
 	copy.albedo_texture = null
 	copy.metallic = 0.06
-	copy.metallic_texture = null
-	copy.roughness = 0.46
-	copy.roughness_texture = null
+	copy.roughness = 0.48
+	if copy is StandardMaterial3D:
+		var std := copy as StandardMaterial3D
+		std.metallic_texture = null
+		std.roughness_texture = null
 	return copy
+
+
+func _close_drawers(cabinet: Node3D) -> void:
+	# The cabinet front is an open frame. These sheets close the three drawers.
+	var face := _mat(Color(0.78, 0.79, 0.80), 0.52, 0.02)
+	var pull := _mat(Color(0.38, 0.39, 0.41), 0.35, 0.55)
+	var height := 0.385
+	var gap := 0.015
+	for i in 3:
+		var bottom := 0.09 + float(i) * (height + gap)
+		var y := bottom + height * 0.5
+		_bit(cabinet, Vector3(0.0, y, 0.382), Vector3(0.40, height - 0.008, 0.016), face)
+		_bit(cabinet, Vector3(0.0, bottom + height - 0.045, 0.394), Vector3(0.16, 0.016, 0.008), pull)
 
 
 func _filing_cabinet(at: Vector3, yaw: float) -> void:
 	var node := _bk(BK_CABINET, _geometry, at, yaw)
 	_paint_white_cabinet(node)
+	_close_drawers(node)
 	return
 	var root := Node3D.new()
 	root.name = "FilingCabinet"
