@@ -10,13 +10,11 @@ var _left_closed := Vector3.ZERO
 var _right_closed := Vector3.ZERO
 
 
-func build(floor_number: String) -> void:
+func build(floor_number: String, outside_z: float) -> void:
 	var steel := _material(Color(0.74, 0.75, 0.77), 0.22, 0.82)
 	var trim := _material(Color(0.55, 0.56, 0.58), 0.4, 0.65)
 	var wall := _material(Color(0.62, 0.63, 0.65), 0.7, 0.15)
-	var dark := _material(Color(0.12, 0.13, 0.14), 0.45, 0.3)
 	var lamp := _material(Color(0.9, 0.92, 0.9), 0.4, 0.0, Color(0.9, 0.95, 0.92), 4.0)
-	var display := _material(Color(0.05, 0.2, 0.12), 0.4, 0.0, Color(0.2, 0.85, 0.4), 2.2)
 
 	_mesh(Vector3(0.58, 1.5, 0.0), Vector3(1.16, 3.0, 0.12), wall)
 	_mesh(Vector3(3.42, 1.5, 0.0), Vector3(1.16, 3.0, 0.12), wall)
@@ -38,21 +36,17 @@ func build(floor_number: String) -> void:
 	_blocker.position = Vector3(2.0, 1.18, 0.0)
 	add_child(_blocker)
 
-	var button := CollisionShape3D.new()
-	var plate := BoxShape3D.new()
-	plate.size = Vector3(0.22, 0.46, 0.08)
-	button.shape = plate
-	button.position = Vector3(3.28, 1.28, -0.08)
-	add_child(button)
-	_mesh(Vector3(3.28, 1.28, -0.09), Vector3(0.18, 0.42, 0.03), trim)
-	_mesh(Vector3(3.28, 1.42, -0.11), Vector3(0.1, 0.05, 0.012), display)
-	for row in range(3):
-		for col in range(2):
-			_mesh(
-				Vector3(3.24 + float(col) * 0.07, 1.16 + float(row) * 0.08, -0.11),
-				Vector3(0.035, 0.035, 0.012),
-				dark
-			)
+	# One call button on the corridor face of the right jamb.
+	var button := _material(Color(0.1, 0.1, 0.11), 0.35, 0.45)
+	var proud := 0.02 if outside_z > 0.0 else -0.02
+	_mesh(Vector3(3.18, 1.18, outside_z), Vector3(0.1, 0.16, 0.018), trim)
+	_mesh(Vector3(3.18, 1.18, outside_z + proud), Vector3(0.045, 0.045, 0.012), button)
+	var press := CollisionShape3D.new()
+	var press_box := BoxShape3D.new()
+	press_box.size = Vector3(0.12, 0.2, 0.06)
+	press.shape = press_box
+	press.position = Vector3(3.18, 1.18, outside_z)
+	add_child(press)
 
 	var number := Label3D.new()
 	number.text = floor_number

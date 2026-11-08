@@ -86,7 +86,7 @@ After the editor opens, `scripts/` and `scenes/` show up in the FileSystem dock.
 
 `scripts/office_level.gd` builds the floor at runtime from the 4 m kit. The south end keeps the original corridor, break room, cubicles, security room, and stair. North of that are more offices, a stairwell, two linked elevators, a server room, a meeting room, and a small room with an old CRT desk.
 
-Corridors stay empty. Of the other rooms, half are completely bare and half contain one cluster: a lone chair, a desk, a CRT with a tower, a cubicle, folding chairs, or a ladder.
+Corridors stay empty. Other rooms are either bare or hold one cluster: a lone chair, a desk, a CRT with a tower, a cubicle, folding chairs, or a ladder. Some of the bare rooms are offices with a computer. A few rooms switch to a concrete floor with cold light, or a brown floor with warm light and tinted walls. The outer walls carry the same dark windows as the cubicle hall.
 
 ### Controls
 

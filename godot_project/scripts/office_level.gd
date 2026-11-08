@@ -18,12 +18,14 @@ const COLUMN := preload("res://models/office/column.glb")
 const TABLE := preload("res://models/office/table.glb")
 const ELEVATOR_DOORS := preload("res://scripts/elevator_doors.gd")
 const ELEVATOR_PANEL := preload("res://scripts/elevator_panel.gd")
+const FLOOR_EXIT := preload("res://scripts/floor_exit.gd")
 
 var _cells: Array[Vector2i] = []
 var _cell_set: Dictionary = {}
 var _concrete: Dictionary = {}
 var _expansion: Dictionary = {}
 var _tall: Dictionary = {}
+var _room_style: Dictionary = {}
 var _overrides: Dictionary = {}
 var _door_flags: Dictionary = {}
 var _geometry: Node3D
@@ -112,9 +114,17 @@ func _mark_openings() -> void:
 func _build_shell() -> void:
 	for cell in _cells:
 		var origin := Vector3(cell.x * CELL, 0.0, cell.y * CELL)
-		var floor_scene: PackedScene = CONCRETE if _concrete.has(cell) else CARPET
-		_add(floor_scene, origin)
+		var style: StringName = _room_style.get(cell, &"")
+		if style == &"warm":
+			_tint_rough(_add(CARPET, origin), Color(0.4, 0.26, 0.16))
+		else:
+			var floor_scene: PackedScene = CONCRETE if _concrete.has(cell) or style == &"concrete" else CARPET
+			_add(floor_scene, origin)
 		var ceiling := _add(CEILING, origin)
+		if style == &"concrete":
+			_tint_rough(ceiling, Color(0.5, 0.54, 0.58))
+		elif style == &"warm":
+			_tint_rough(ceiling, Color(0.7, 0.58, 0.42))
 		if _tall.has(cell):
 			ceiling.position.y += 2.6
 
@@ -133,11 +143,11 @@ func _build_shell() -> void:
 				kind = "none" if _cell_set.has(neighbor) else "wall"
 			match kind:
 				"wall":
-					_place_module(WALL, canon_cell, canon_edge)
+					_tint_edge(_place_module(WALL, canon_cell, canon_edge), canon_cell, canon_edge)
 				"window":
-					_place_module(WINDOW, canon_cell, canon_edge)
+					_tint_edge(_place_module(WINDOW, canon_cell, canon_edge), canon_cell, canon_edge)
 				"door":
-					_place_door(canon_cell, canon_edge, key)
+					_tint_edge(_place_door(canon_cell, canon_edge, key), canon_cell, canon_edge)
 				"elevator":
 					pass
 				_:
@@ -154,6 +164,22 @@ func _build_lights() -> void:
 		panel.position = Vector3(cell.x * CELL + 2.0, fixture_y, cell.y * CELL + 2.0)
 		_geometry.add_child(panel)
 		var glow := panel.get_node(^"Glow") as OmniLight3D
+		var style: StringName = _room_style.get(cell, &"")
+		if style != &"":
+			if (cell.x + cell.y) % 2 == 1:
+				glow.visible = false
+				_dim_emissive(panel)
+				continue
+			glow.visible = true
+			glow.shadow_enabled = false
+			glow.omni_range = 12.0
+			if style == &"concrete":
+				glow.light_color = Color(0.6, 0.78, 1.0)
+				glow.light_energy = 1.0
+			else:
+				glow.light_color = Color(1.0, 0.73, 0.42)
+				glow.light_energy = 1.35
+			continue
 		if mode == 2:
 			glow.visible = false
 			_dim_emissive(panel)
@@ -200,6 +226,8 @@ func _build_props() -> void:
 	_crt_room()
 	_build_elevators()
 	_furnish_half()
+	_scatter_reference_props()
+	_upside_down_exit(Vector3(4.0, 2.15, 227.78))
 
 
 func _break_room() -> void:
@@ -342,6 +370,91 @@ func _expand_floor() -> void:
 	_mark(Vector2i(-6, 49), "n", "wall")
 	_mark(Vector2i(-6, 50), "n", "wall")
 	_mark(Vector2i(-6, 50), "e", "elevator")
+	_mark_perimeter_windows()
+	_assign_room_styles()
+
+
+func _mark_perimeter_windows() -> void:
+	# Pairs of night windows along the outer walls, same module as the office hall.
+	for cell in _cells:
+		if cell.x >= -6 and cell.x <= -5 and cell.y >= 24 and cell.y <= 26:
+			continue
+		# Spawn is the south end of the x = 0 corridor. Those walls stay solid.
+		if cell.x == 0 and cell.y <= 5:
+			continue
+		for edge in EDGES:
+			if _cell_set.has(cell + _delta(edge)):
+				continue
+			var kind := _kind_on(cell, edge)
+			if kind == "door" or kind == "elevator" or kind == "window":
+				continue
+			var along := cell.y if edge == "e" or edge == "w" else cell.x
+			if posmod(along, 5) > 1:
+				continue
+			_mark(cell, edge, "window")
+
+
+func _assign_room_styles() -> void:
+	var seen: Dictionary = {}
+	for cell in _cells:
+		if _skip_furnish(cell) or seen.has(cell):
+			continue
+		var room: Array[Vector2i] = []
+		var stack: Array[Vector2i] = [cell]
+		seen[cell] = true
+		while not stack.is_empty():
+			var here: Vector2i = stack.pop_back()
+			room.append(here)
+			for edge in EDGES:
+				if _kind_on(here, edge) != "none":
+					continue
+				var nxt: Vector2i = here + _delta(edge)
+				if _skip_furnish(nxt) or seen.has(nxt) or not _cell_set.has(nxt):
+					continue
+				seen[nxt] = true
+				stack.append(nxt)
+		var origin := _room_min(room)
+		var band := posmod(origin.x * 3 + origin.y, 7)
+		var style := &""
+		if band == 0:
+			style = &"concrete"
+		elif band == 3:
+			style = &"warm"
+		if style == &"":
+			continue
+		for item in room:
+			var here: Vector2i = item
+			_room_style[here] = style
+			if style == &"concrete":
+				_concrete[here] = true
+
+
+func _tint_edge(node: Node, cell: Vector2i, edge: String) -> void:
+	var style: StringName = _room_style.get(cell, &"")
+	if style == &"":
+		style = _room_style.get(cell + _delta(edge), &"")
+	if style == &"concrete":
+		_tint_rough(node, Color(0.58, 0.64, 0.7))
+	elif style == &"warm":
+		_tint_rough(node, Color(0.78, 0.66, 0.48))
+
+
+func _tint_rough(node: Node, color: Color) -> void:
+	if node is MeshInstance3D:
+		var mesh_node := node as MeshInstance3D
+		var mesh := mesh_node.mesh
+		if mesh != null:
+			for surface in mesh.get_surface_count():
+				var source := mesh_node.get_active_material(surface)
+				if source is StandardMaterial3D:
+					var material := source as StandardMaterial3D
+					if material.metallic < 0.45 and material.roughness > 0.4 and not material.emission_enabled:
+						var painted := material.duplicate() as StandardMaterial3D
+						painted.albedo_color = color
+						painted.albedo_texture = null
+						mesh_node.set_surface_override_material(surface, painted)
+	for child in node.get_children():
+		_tint_rough(child, color)
 
 
 func _partition_south_offices() -> void:
@@ -544,11 +657,11 @@ func _extra_rooms() -> void:
 func _build_elevators() -> void:
 	var first = ELEVATOR_DOORS.new()
 	first.name = "ElevatorA"
-	first.build("04")
+	first.build("04", -0.12)
 	_place_node(first, Vector2i(5, 2), "e")
 	var second = ELEVATOR_DOORS.new()
 	second.name = "ElevatorB"
-	second.build("05")
+	second.build("05", 0.12)
 	_place_node(second, Vector2i(-6, 50), "e")
 	var marker_a := _elevator_marker("RideA", Vector3(26.5, 0.05, 10.0), PI * 0.5)
 	var marker_b := _elevator_marker("RideB", Vector3(-22.5, 0.05, 202.0), -PI * 0.5)
@@ -934,13 +1047,10 @@ func _rack(at: Vector3, yaw: float, alarm: bool, blue: Material, red: Material) 
 
 
 func _meeting_room() -> void:
-	var wood := _mat(Color(0.45, 0.32, 0.2), 0.55)
-	_solid("MeetTable", Vector3(12.0, 0.76, 134.0), Vector3(1.3, 0.06, 6.4), wood)
-	_solid("MeetLeg", Vector3(12.0, 0.38, 131.4), Vector3(0.08, 0.76, 0.08), _metal_mat)
-	_solid("MeetLeg", Vector3(12.0, 0.38, 136.6), Vector3(0.08, 0.76, 0.08), _metal_mat)
+	_conference_table(Vector3(12.0, 0.0, 134.0))
 	for z in [131.2, 134.0, 136.8]:
-		_office_chair(_geometry, Vector3(10.85, 0.0, z), PI * 0.5)
-		_office_chair(_geometry, Vector3(13.15, 0.0, z), -PI * 0.5)
+		_task_chair(Vector3(10.85, 0.0, z), PI * 0.5)
+		_task_chair(Vector3(13.15, 0.0, z), -PI * 0.5)
 	var bezel := _mat(Color(0.05, 0.05, 0.06), 0.4, 0.3)
 	var screen := _mat(Color(0.01, 0.02, 0.03), 0.12, 0.0, Color(0.05, 0.08, 0.12), 0.35)
 	_solid("MeetScreen", Vector3(15.9, 1.65, 134.0), Vector3(0.06, 1.15, 2.3), bezel)
@@ -1054,7 +1164,7 @@ func _place_module(packed: PackedScene, cell: Vector2i, edge: String, height: fl
 	return node
 
 
-func _place_door(cell: Vector2i, edge: String, key: String) -> void:
+func _place_door(cell: Vector2i, edge: String, key: String) -> Node3D:
 	var node := DOOR.instantiate() as Node3D
 	var flags: Dictionary = _door_flags.get(key, {})
 	var leaf := node.find_child("Door", true, false) as Door
@@ -1081,6 +1191,7 @@ func _place_door(cell: Vector2i, edge: String, key: String) -> void:
 	node.position = pos
 	node.rotation.y = rot
 	_geometry.add_child(node)
+	return node
 
 
 func _add(packed: PackedScene, origin: Vector3) -> Node3D:
@@ -1214,6 +1325,9 @@ func _furnish_half() -> void:
 	var placed := 0
 	for index in rooms.size():
 		if index % 2 == 1:
+			# A share of the bare rooms becomes an office with a computer.
+			if posmod(index, 4) == 1:
+				_furnish_room(rooms[index], 2 if posmod(index, 8) == 1 else 3)
 			continue
 		_furnish_room(rooms[index], placed)
 		placed += 1
@@ -1477,6 +1591,186 @@ func _security_camera(at: Vector3) -> void:
 	led.light_energy = 0.35
 	led.omni_range = 0.8
 	_geometry.add_child(led)
+
+
+func _scatter_reference_props() -> void:
+	_potted_tree(Vector3(6.2, 0.0, 63.6))
+	_broadleaf_plant(Vector3(8.75, 0.0, 26.3))
+	_metal_shelf(Vector3(-7.72, 0.0, 66.2), PI * 0.5)
+	_office_copier(Vector3(15.52, 0.0, 26.5), -PI * 0.5)
+	_filing_cabinet(Vector3(-15.62, 0.0, 67.4), PI * 0.5)
+
+
+func _potted_tree(at: Vector3) -> void:
+	var root := Node3D.new()
+	root.name = "PottedTree"
+	root.position = at
+	_geometry.add_child(root)
+	var pot := _mat(Color(0.07, 0.07, 0.08), 0.55)
+	var bark := _mat(Color(0.4, 0.25, 0.14), 0.78)
+	var leaf := _mat(Color(0.15, 0.4, 0.14), 0.72)
+	var shade := _mat(Color(0.1, 0.28, 0.1), 0.75)
+	_cylinder(root, Vector3(0.0, 0.16, 0.0), 0.16, 0.13, 0.32, pot)
+	_cylinder(root, Vector3(0.0, 0.85, 0.0), 0.04, 0.065, 1.2, bark)
+	_sphere(root, Vector3(0.0, 1.72, 0.0), 0.42, leaf)
+	_sphere(root, Vector3(0.3, 1.55, 0.1), 0.28, shade)
+	_sphere(root, Vector3(-0.28, 1.58, -0.08), 0.3, leaf)
+	_sphere(root, Vector3(0.06, 1.98, -0.14), 0.24, shade)
+	_sphere(root, Vector3(-0.08, 1.86, 0.24), 0.22, leaf)
+
+
+func _broadleaf_plant(at: Vector3) -> void:
+	var root := Node3D.new()
+	root.name = "Broadleaf"
+	root.position = at
+	_geometry.add_child(root)
+	var pot := _mat(Color(0.07, 0.07, 0.08), 0.55)
+	var leaf := _mat(Color(0.2, 0.5, 0.2), 0.55)
+	var stripe := _mat(Color(0.78, 0.84, 0.55), 0.5)
+	_cylinder(root, Vector3(0.0, 0.1, 0.0), 0.11, 0.09, 0.2, pot)
+	for i in 7:
+		var stem := Node3D.new()
+		stem.rotation.y = float(i) * TAU / 7.0
+		stem.rotation.z = deg_to_rad(-16.0 - float(i % 3) * 7.0)
+		root.add_child(stem)
+		_bit(stem, Vector3(0.0, 0.52, 0.0), Vector3(0.11, 0.72, 0.012), leaf)
+		_bit(stem, Vector3(0.0, 0.52, 0.008), Vector3(0.03, 0.55, 0.006), stripe)
+
+
+func _metal_shelf(at: Vector3, yaw: float) -> void:
+	var root := Node3D.new()
+	root.name = "MetalShelf"
+	root.position = at
+	root.rotation.y = yaw
+	_geometry.add_child(root)
+	var steel := _mat(Color(0.76, 0.77, 0.79), 0.28, 0.86)
+	var board := _mat(Color(0.62, 0.46, 0.28), 0.62)
+	for side in [-0.44, 0.44]:
+		for depth in [-0.16, 0.16]:
+			_part(root, Vector3(side, 0.9, depth), Vector3(0.028, 1.8, 0.028), steel)
+	for i in 5:
+		_part(root, Vector3(0.0, 0.08 + float(i) * 0.4, 0.0), Vector3(0.9, 0.022, 0.36), board)
+
+
+func _office_copier(at: Vector3, yaw: float) -> void:
+	var root := Node3D.new()
+	root.name = "Copier"
+	root.position = at
+	root.rotation.y = yaw
+	_geometry.add_child(root)
+	var body := _mat(Color(0.9, 0.91, 0.92), 0.38)
+	var dark := _mat(Color(0.16, 0.18, 0.22), 0.45)
+	var screen := _mat(Color(0.04, 0.08, 0.12), 0.2, 0.0, Color(0.25, 0.5, 0.75), 0.9)
+	_part(root, Vector3(0.0, 0.48, 0.0), Vector3(0.72, 0.9, 0.64), body)
+	_part(root, Vector3(0.0, 1.02, -0.04), Vector3(0.66, 0.2, 0.5), dark)
+	_bit(root, Vector3(0.16, 1.08, 0.24), Vector3(0.18, 0.12, 0.012), screen)
+	_bit(root, Vector3(-0.2, 0.92, 0.3), Vector3(0.3, 0.02, 0.18), body)
+	for i in 3:
+		_bit(root, Vector3(0.2, 0.22 + float(i) * 0.16, 0.33), Vector3(0.28, 0.01, 0.008), dark)
+
+
+func _filing_cabinet(at: Vector3, yaw: float) -> void:
+	var root := Node3D.new()
+	root.name = "FilingCabinet"
+	root.position = at
+	root.rotation.y = yaw
+	_geometry.add_child(root)
+	var grey := _mat(Color(0.68, 0.69, 0.71), 0.38, 0.12)
+	var line := _mat(Color(0.32, 0.33, 0.35), 0.45)
+	_part(root, Vector3(0.0, 0.52, 0.0), Vector3(0.46, 1.02, 0.58), grey)
+	for i in 3:
+		_bit(root, Vector3(0.0, 0.28 + float(i) * 0.3, 0.3), Vector3(0.36, 0.012, 0.008), line)
+	_bit(root, Vector3(0.16, 0.9, 0.3), Vector3(0.025, 0.018, 0.01), _metal_mat)
+
+
+func _conference_table(at: Vector3) -> void:
+	var root := Node3D.new()
+	root.name = "ConferenceTable"
+	root.position = at
+	_geometry.add_child(root)
+	var grey := _mat(Color(0.62, 0.64, 0.66), 0.38, 0.04)
+	var stripe := _mat(Color(0.46, 0.28, 0.16), 0.5)
+	var leg := _mat(Color(0.34, 0.36, 0.38), 0.32, 0.65)
+	_part(root, Vector3(0.0, 0.76, 0.0), Vector3(1.4, 0.05, 6.2), grey)
+	_part(root, Vector3(0.0, 0.79, 0.0), Vector3(0.14, 0.012, 5.5), stripe)
+	for end_z in [-2.55, 2.55]:
+		_splayed_leg(root, Vector3(-0.18, 0.0, end_z), -0.55, leg)
+		_splayed_leg(root, Vector3(0.18, 0.0, end_z), 0.55, leg)
+
+
+func _splayed_leg(parent: Node3D, foot: Vector3, top_x: float, material: Material) -> void:
+	var top := Vector3(top_x, 0.74, foot.z)
+	var delta := top - foot
+	var mesh_node := MeshInstance3D.new()
+	mesh_node.position = (top + foot) * 0.5
+	mesh_node.rotation.z = atan2(-delta.x, delta.y)
+	var box := BoxMesh.new()
+	box.size = Vector3(0.04, delta.length(), 0.05)
+	mesh_node.mesh = box
+	mesh_node.material_override = material
+	parent.add_child(mesh_node)
+
+
+func _task_chair(at: Vector3, yaw: float) -> void:
+	var root := Node3D.new()
+	root.name = "TaskChair"
+	root.position = at
+	root.rotation.y = yaw
+	_geometry.add_child(root)
+	var cloth := _mat(Color(0.12, 0.13, 0.15), 0.72)
+	var base := _mat(Color(0.2, 0.21, 0.22), 0.32, 0.7)
+	_part(root, Vector3(0.0, 0.48, 0.02), Vector3(0.46, 0.07, 0.46), cloth)
+	_part(root, Vector3(0.0, 0.74, -0.16), Vector3(0.44, 0.4, 0.06), cloth)
+	_part(root, Vector3(-0.24, 0.58, 0.02), Vector3(0.03, 0.18, 0.04), base)
+	_part(root, Vector3(0.24, 0.58, 0.02), Vector3(0.03, 0.18, 0.04), base)
+	_bit(root, Vector3(-0.24, 0.68, 0.04), Vector3(0.05, 0.025, 0.24), cloth)
+	_bit(root, Vector3(0.24, 0.68, 0.04), Vector3(0.05, 0.025, 0.24), cloth)
+	_part(root, Vector3(0.0, 0.28, 0.0), Vector3(0.06, 0.32, 0.06), base)
+	for i in range(5):
+		var caster := Node3D.new()
+		caster.rotation.y = float(i) * TAU / 5.0
+		root.add_child(caster)
+		_bit(caster, Vector3(0.0, 0.08, 0.16), Vector3(0.03, 0.02, 0.28), base)
+		_bit(caster, Vector3(0.0, 0.045, 0.28), Vector3(0.045, 0.04, 0.05), base)
+
+
+func _sphere(parent: Node3D, origin: Vector3, radius: float, material: Material) -> void:
+	var mesh_node := MeshInstance3D.new()
+	mesh_node.position = origin
+	var sphere := SphereMesh.new()
+	sphere.radius = radius
+	sphere.height = radius * 2.0
+	sphere.radial_segments = 16
+	sphere.rings = 8
+	mesh_node.mesh = sphere
+	mesh_node.material_override = material
+	parent.add_child(mesh_node)
+
+
+func _upside_down_exit(at: Vector3) -> void:
+	var sign = FLOOR_EXIT.new()
+	sign.name = "UpsideDownExit"
+	sign.position = at
+	var label := Label3D.new()
+	label.text = "EXIT"
+	label.pixel_size = 0.006
+	label.font_size = 120
+	label.modulate = Color(0.92, 0.03, 0.04)
+	label.outline_modulate = Color(0.4, 0.0, 0.0)
+	label.outline_size = 12
+	label.rotation = Vector3(0.0, PI, PI)
+	sign.add_child(label)
+	var collision := CollisionShape3D.new()
+	var box := BoxShape3D.new()
+	box.size = Vector3(1.35, 0.42, 0.1)
+	collision.shape = box
+	sign.add_child(collision)
+	var glow := OmniLight3D.new()
+	glow.light_color = Color(1.0, 0.12, 0.08)
+	glow.light_energy = 0.8
+	glow.omni_range = 2.4
+	sign.add_child(glow)
+	_geometry.add_child(sign)
 
 
 func _exit_sign(at: Vector3) -> void:
