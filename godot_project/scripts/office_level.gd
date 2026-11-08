@@ -1,9 +1,11 @@
 extends Node3D
 ## Walkable floor of Floor 404. The original rooms stay at the south end, and a
 ## larger wing of offices, a stairwell, and two elevators continues north.
-## Modules are 4 m on a side. Walls are 3 m tall. The player starts in the corridor.
+## Modules are 4 m on a side. The shell is lifted a little above the 3 m kit so a
+## 1.70 m player has the ceiling just overhead. The player starts in the corridor.
 
 const CELL := 4.0
+const CEILING_LIFT := 0.4
 const EDGES: Array[String] = ["n", "s", "e", "w"]
 
 const CARPET := preload("res://scenes/modular/carpet_4x4.tscn")
@@ -16,6 +18,23 @@ const LIGHT := preload("res://scenes/modular/light_panel.tscn")
 const CUBICLE := preload("res://models/office/cubicle.glb")
 const COLUMN := preload("res://models/office/column.glb")
 const TABLE := preload("res://models/office/table.glb")
+const BK_OFFICE_CHAIR := preload("res://models/blendkit/office_chair.glb")
+const BK_WOOD_CHAIR := preload("res://models/blendkit/wooden_chair.glb")
+const BK_FOLD_CHAIR := preload("res://models/blendkit/folding_chair.glb")
+const BK_TABLE := preload("res://models/blendkit/conference.glb")
+const BK_CRT := preload("res://models/blendkit/crt.glb")
+const BK_KEYBOARD := preload("res://models/blendkit/keyboard.glb")
+const BK_TOWER := preload("res://models/blendkit/tower.glb")
+const BK_COOLER := preload("res://models/blendkit/cooler.glb")
+const BK_FRIDGE := preload("res://models/blendkit/fridge.glb")
+const BK_EXTINGUISHER := preload("res://models/blendkit/extinguisher.glb")
+const BK_LADDER := preload("res://models/blendkit/ladder.glb")
+const BK_PLANT := preload("res://models/blendkit/plant.glb")
+const BK_TREE := preload("res://models/blendkit/tree.glb")
+const BK_SHELF := preload("res://models/blendkit/shelf.glb")
+const BK_COPIER := preload("res://models/blendkit/copier.glb")
+const BK_CABINET := preload("res://models/blendkit/cabinet.glb")
+const BK_CAMERA := preload("res://models/blendkit/camera.glb")
 const ELEVATOR_DOORS := preload("res://scripts/elevator_doors.gd")
 const ELEVATOR_PANEL := preload("res://scripts/elevator_panel.gd")
 const FLOOR_EXIT := preload("res://scripts/floor_exit.gd")
@@ -26,10 +45,15 @@ var _concrete: Dictionary = {}
 var _expansion: Dictionary = {}
 var _tall: Dictionary = {}
 var _room_style: Dictionary = {}
+var _flicker_cells: Dictionary = {}
+var _flicker_lights: Array[OmniLight3D] = []
+var _flicker_energy: Array[float] = []
 var _overrides: Dictionary = {}
 var _door_flags: Dictionary = {}
 var _geometry: Node3D
 var _prop_index := 0
+var _table_serial := 0
+var _wall_paint: StandardMaterial3D
 
 var _cubicle_mat: StandardMaterial3D
 var _desk_mat: StandardMaterial3D
@@ -50,6 +74,27 @@ func _ready() -> void:
 	_build_shell()
 	_build_lights()
 	_build_props()
+
+
+func _process(_delta: float) -> void:
+	if _flicker_lights.is_empty():
+		return
+	var t := Time.get_ticks_msec() * 0.001
+	for i in _flicker_lights.size():
+		var wave := sin(t * 17.0 + float(i) * 2.3) + sin(t * 5.5 + float(i) * 0.7)
+		var factor := 1.0
+		if wave < -1.15:
+			factor = 0.08
+		elif wave < -0.35:
+			factor = 0.4
+		_flicker_lights[i].light_energy = _flicker_energy[i] * factor
+
+
+func _maybe_flicker(cell: Vector2i, glow: OmniLight3D) -> void:
+	if not _flicker_cells.has(cell) or not glow.visible:
+		return
+	_flicker_lights.append(glow)
+	_flicker_energy.append(glow.light_energy)
 
 
 func _prepare_materials() -> void:
@@ -127,6 +172,7 @@ func _build_shell() -> void:
 			_tint_rough(ceiling, Color(0.7, 0.58, 0.42))
 		if _tall.has(cell):
 			ceiling.position.y += 2.6
+		ceiling.position.y += CEILING_LIFT
 
 	var placed: Dictionary = {}
 	for cell in _cells:
@@ -143,11 +189,17 @@ func _build_shell() -> void:
 				kind = "none" if _cell_set.has(neighbor) else "wall"
 			match kind:
 				"wall":
-					_tint_edge(_place_module(WALL, canon_cell, canon_edge), canon_cell, canon_edge)
+					var wall := _place_module(WALL, canon_cell, canon_edge)
+					_lift_shell(wall)
+					_tint_edge(wall, canon_cell, canon_edge)
 				"window":
-					_tint_edge(_place_module(WINDOW, canon_cell, canon_edge), canon_cell, canon_edge)
+					var window := _place_module(WINDOW, canon_cell, canon_edge)
+					_lift_shell(window)
+					_tint_edge(window, canon_cell, canon_edge)
 				"door":
-					_tint_edge(_place_door(canon_cell, canon_edge, key), canon_cell, canon_edge)
+					var door := _place_door(canon_cell, canon_edge, key)
+					_above_opening(door)
+					_tint_edge(door, canon_cell, canon_edge)
 				"elevator":
 					pass
 				_:
@@ -159,14 +211,22 @@ func _build_lights() -> void:
 		var mode := _light_mode(cell)
 		if mode == 0:
 			continue
-		var fixture_y := 5.3 if _tall.has(cell) else 2.9
+		var fixture_y := (5.3 if _tall.has(cell) else 2.9) + CEILING_LIFT
 		var panel := LIGHT.instantiate() as Node3D
 		panel.position = Vector3(cell.x * CELL + 2.0, fixture_y, cell.y * CELL + 2.0)
 		_geometry.add_child(panel)
 		var glow := panel.get_node(^"Glow") as OmniLight3D
+		if _is_pantry(cell):
+			glow.visible = true
+			glow.shadow_enabled = false
+			glow.light_color = Color(1.0, 0.95, 0.86)
+			glow.light_energy = 2.4
+			glow.omni_range = 8.0
+			continue
 		var style: StringName = _room_style.get(cell, &"")
+		var flickering := _flicker_cells.has(cell)
 		if style != &"":
-			if (cell.x + cell.y) % 2 == 1:
+			if (cell.x + cell.y) % 2 == 1 and not flickering:
 				glow.visible = false
 				_dim_emissive(panel)
 				continue
@@ -179,13 +239,14 @@ func _build_lights() -> void:
 			else:
 				glow.light_color = Color(1.0, 0.73, 0.42)
 				glow.light_energy = 1.35
+			_maybe_flicker(cell, glow)
 			continue
-		if mode == 2:
+		if mode == 2 and not flickering:
 			glow.visible = false
 			_dim_emissive(panel)
 			continue
 		var on_grid := posmod(cell.x, 3) == 0 and posmod(cell.y, 3) == 0
-		if mode != 3 and not _tall.has(cell) and not on_grid:
+		if mode != 3 and not _tall.has(cell) and not on_grid and not flickering:
 			glow.visible = false
 			continue
 		glow.omni_range = 14.0
@@ -195,6 +256,7 @@ func _build_lights() -> void:
 		if _region_of(cell) == &"service" or _region_of(cell) == &"security":
 			glow.light_color = Color(0.72, 0.82, 0.9)
 			glow.light_energy = 1.5
+		_maybe_flicker(cell, glow)
 
 	_spot(Vector3(-2.2, 2.65, 30.0), Vector3(22.0, 90.0, 0.0), 8.0, Color(0.85, 0.95, 0.8), true)
 	_spot(Vector3(6.4, 2.8, 59.2), Vector3(48.0, 20.0, 0.0), 10.0, Color(1.0, 0.94, 0.82), true)
@@ -214,9 +276,11 @@ func _build_lights() -> void:
 func _build_props() -> void:
 	_ladder(Vector3(6.2, 0.0, 10.2))
 	_break_room()
+	_extra_break_rooms()
 	_cubicles()
 	_columns()
-	_security_camera(Vector3(7.55, 2.45, 62.0))
+	_security_camera(Vector3(7.55, 2.85, 62.0))
+	_place_more_cameras()
 	_security_room()
 	_stair()
 	_stairwell()
@@ -227,22 +291,86 @@ func _build_props() -> void:
 	_build_elevators()
 	_furnish_half()
 	_scatter_reference_props()
+	_place_extinguishers()
 	_upside_down_exit(Vector3(4.0, 2.15, 227.78))
 
 
 func _break_room() -> void:
 	_table(Vector3(10.2, 0.0, 27.5))
+	_seat(Vector3(10.2, 0.0, 27.5), "n", 0.0, "wood")
 	_table(Vector3(13.4, 0.0, 31.5))
-	_chair(Vector3(10.2, 0.0, 28.6))
-	_chair(Vector3(13.4, 0.0, 30.4))
+	_seat(Vector3(13.4, 0.0, 31.5), "s", 0.0, "wood")
 	# North wall, clear of the east and west doors around z = 30.
 	_cooler(Vector3(9.7, 0.0, 35.75), PI)
 	_fridge(Vector3(13.6, 0.0, 35.64), PI)
 	_counter(Vector3(12.4, 0.0, 24.45))
-	_extinguisher(Vector3(15.62, 0.0, 26.4))
+	_extinguisher(Vector3(15.78, 0.0, 26.2))
 	_folding_chair(Vector3(11.4, 0.0, 33.4), 0.4)
 	_folding_chair(Vector3(12.5, 0.0, 33.9), -0.3)
 	_solid("Books", Vector3(9.2, 0.08, 26.4), Vector3(0.28, 0.08, 0.2), _desk_mat)
+
+
+func _extra_break_rooms() -> void:
+	# West pantry. Counter faces into the room from the east wall.
+	_table(Vector3(-8.0, 0.0, 117.2))
+	_seat(Vector3(-8.0, 0.0, 117.2), "n", 0.0, "fold")
+	_seat(Vector3(-8.0, 0.0, 117.2), "s", 0.0, "fold")
+	_counter(Vector3(-4.4, 0.0, 116.5), -PI * 0.5)
+	_cooler(Vector3(-5.2, 0.0, 121.2), -PI * 0.5)
+	# East pantry. Counter faces into the room from the north wall.
+	_table(Vector3(28.2, 0.0, 213.4))
+	_seat(Vector3(28.2, 0.0, 213.4), "n", 0.0, "fold")
+	_seat(Vector3(28.2, 0.0, 213.4), "w", 0.0, "fold")
+	_counter(Vector3(28.0, 0.0, 219.6), PI)
+	_cooler(Vector3(30.6, 0.0, 218.4), PI)
+
+
+func _place_more_cameras() -> void:
+	var placed := 0
+	for cell in _cells:
+		if placed >= 10:
+			break
+		if posmod(cell.x * 5 + cell.y * 2, 13) != 4:
+			continue
+		if _kind_on(cell, "n") == "door":
+			continue
+		_security_camera(Vector3(cell.x * CELL + 0.35, 2.85, (cell.y + 1) * CELL - 0.22))
+		placed += 1
+
+
+func _place_extinguishers() -> void:
+	var spots: Array[Vector3] = []
+	for cell in _cells:
+		var spot := _extinguisher_spot(cell)
+		if spot.is_empty():
+			continue
+		spots.append(spot[0] as Vector3)
+	var count := mini(30, spots.size())
+	for i in count:
+		var index := int(float(i) * float(spots.size()) / float(count))
+		_extinguisher(spots[index])
+
+
+func _extinguisher_spot(cell: Vector2i) -> Array:
+	var inset := 0.22
+	var along := 0.42
+	var origin := Vector3(cell.x * CELL, 0.0, cell.y * CELL)
+	for edge in EDGES:
+		var kind := _kind_on(cell, edge)
+		if kind != "wall" and kind != "window":
+			continue
+		var at := origin
+		match edge:
+			"w":
+				at += Vector3(inset, 0.0, along)
+			"e":
+				at += Vector3(CELL - inset, 0.0, CELL - along)
+			"s":
+				at += Vector3(CELL - along, 0.0, inset)
+			_:
+				at += Vector3(along, 0.0, CELL - inset)
+		return [at]
+	return []
 
 
 func _cubicles() -> void:
@@ -258,13 +386,13 @@ func _columns() -> void:
 
 
 func _security_room() -> void:
-	_solid("Desk", Vector3(-14.2, 0.78, 64.5), Vector3(3.4, 0.08, 0.8), _desk_mat)
-	_solid("DeskLeg", Vector3(-14.2, 0.38, 64.5), Vector3(3.2, 0.72, 0.08), _metal_mat)
-	_office_chair(_geometry, Vector3(-15.0, 0.0, 65.7), PI)
-	_office_chair(_geometry, Vector3(-13.2, 0.0, 65.7), PI)
+	_solid("Desk", Vector3(-14.2, 0.86, 64.5), Vector3(3.4, 0.08, 0.8), _desk_mat)
+	_solid("DeskLeg", Vector3(-14.2, 0.42, 64.5), Vector3(3.2, 0.80, 0.08), _metal_mat)
+	_office_chair(_geometry, Vector3(-15.0, 0.0, 65.22), PI)
+	_office_chair(_geometry, Vector3(-13.2, 0.0, 65.22), PI)
 	for i in range(3):
 		var x := -15.15 + float(i) * 0.95
-		_crt(_geometry, Vector3(x, 0.82, 64.4), 0.0)
+		_crt(_geometry, Vector3(x, 0.90, 64.4), 0.0)
 	_tower(_geometry, Vector3(-12.7, 0.0, 64.35), 0.0)
 	var screen_light := OmniLight3D.new()
 	screen_light.name = "MonitorGlow"
@@ -337,6 +465,16 @@ func _region_of(cell: Vector2i) -> StringName:
 	return &"closet"
 
 
+func _is_pantry(cell: Vector2i) -> bool:
+	if cell.x >= 2 and cell.x <= 3 and cell.y >= 6 and cell.y <= 8:
+		return true
+	if cell.x >= -3 and cell.x <= -2 and cell.y >= 28 and cell.y <= 30:
+		return true
+	if cell.x >= 6 and cell.x <= 7 and cell.y >= 52 and cell.y <= 54:
+		return true
+	return false
+
+
 func _expand_floor() -> void:
 	var before := _cell_set.duplicate()
 	# Link off the first corridor, then a long east artery into the north wing.
@@ -359,6 +497,7 @@ func _expand_floor() -> void:
 	_carve_server_room()
 	_carve_meeting_room()
 	_carve_crt_room()
+	_carve_break_rooms()
 	_mark_door(Vector2i(3, 7), "e")
 	_mark(Vector2i(3, 6), "e", "wall")
 	_mark(Vector2i(3, 8), "e", "wall")
@@ -371,6 +510,7 @@ func _expand_floor() -> void:
 	_mark(Vector2i(-6, 50), "n", "wall")
 	_mark(Vector2i(-6, 50), "e", "elevator")
 	_mark_perimeter_windows()
+	_close_interior_windows()
 	_assign_room_styles()
 
 
@@ -391,7 +531,31 @@ func _mark_perimeter_windows() -> void:
 			var along := cell.y if edge == "e" or edge == "w" else cell.x
 			if posmod(along, 5) > 1:
 				continue
+			if not _is_outer_edge(cell, edge):
+				continue
 			_mark(cell, edge, "window")
+
+
+func _is_outer_edge(cell: Vector2i, edge: String) -> bool:
+	var step := _delta(edge)
+	var probe := cell + step
+	if _cell_set.has(probe):
+		return false
+	for _i in 48:
+		probe += step
+		if _cell_set.has(probe):
+			return false
+	return true
+
+
+func _close_interior_windows() -> void:
+	for cell in _cells:
+		for edge in EDGES:
+			if _kind_on(cell, edge) != "window":
+				continue
+			if _is_outer_edge(cell, edge):
+				continue
+			_mark(cell, edge, "wall")
 
 
 func _assign_room_styles() -> void:
@@ -402,18 +566,30 @@ func _assign_room_styles() -> void:
 		var room: Array[Vector2i] = []
 		var stack: Array[Vector2i] = [cell]
 		seen[cell] = true
+		var open_to_plain := false
 		while not stack.is_empty():
 			var here: Vector2i = stack.pop_back()
 			room.append(here)
 			for edge in EDGES:
+				var nxt: Vector2i = here + _delta(edge)
+				if not _cell_set.has(nxt):
+					continue
 				if _kind_on(here, edge) != "none":
 					continue
-				var nxt: Vector2i = here + _delta(edge)
-				if _skip_furnish(nxt) or seen.has(nxt) or not _cell_set.has(nxt):
+				if _skip_furnish(nxt):
+					open_to_plain = true
+					continue
+				if seen.has(nxt):
 					continue
 				seen[nxt] = true
 				stack.append(nxt)
+		if open_to_plain:
+			continue
 		var origin := _room_min(room)
+		if posmod(origin.x + origin.y * 3, 10) == 0:
+			for item in room:
+				var lamp_cell: Vector2i = item
+				_flicker_cells[lamp_cell] = true
 		var band := posmod(origin.x * 3 + origin.y, 7)
 		var style := &""
 		if band == 0:
@@ -429,10 +605,67 @@ func _assign_room_styles() -> void:
 				_concrete[here] = true
 
 
+func _is_corridor_cell(cell: Vector2i) -> bool:
+	return _cell_set.has(cell) and (cell.x == 0 or cell.x == 1 or cell.x == 4)
+
+
+func _lift_shell(node: Node3D) -> void:
+	node.scale.y = (3.0 + CEILING_LIFT) / 3.0
+
+
+func _above_opening(node: Node3D) -> void:
+	# The casing stays at the door height. This band only closes the gap up to the ceiling.
+	var mesh_node := MeshInstance3D.new()
+	mesh_node.name = "AboveOpening"
+	var box := BoxMesh.new()
+	box.size = Vector3(4.0, CEILING_LIFT, 0.16)
+	mesh_node.mesh = box
+	mesh_node.position = Vector3(2.0, 3.0 + CEILING_LIFT * 0.5, 0.0)
+	mesh_node.material_override = _matching_wall_paint()
+	node.add_child(mesh_node)
+
+
+func _matching_wall_paint() -> Material:
+	var source := _wall_paint_source()
+	if source == null:
+		return _mat(Color(0.73, 0.69, 0.6), 0.82)
+	var paint := source.duplicate() as StandardMaterial3D
+	# Keep the same grain size as the 3 m wall, so the strip does not read as a new color.
+	paint.uv1_scale = Vector3(1.0, CEILING_LIFT / 3.0, 1.0)
+	return paint
+
+
+func _wall_paint_source() -> StandardMaterial3D:
+	if _wall_paint != null:
+		return _wall_paint
+	var sample := WALL.instantiate()
+	_wall_paint = _find_textured_material(sample)
+	sample.free()
+	return _wall_paint
+
+
+func _find_textured_material(node: Node) -> StandardMaterial3D:
+	if node is MeshInstance3D:
+		var mesh_node := node as MeshInstance3D
+		var mesh := mesh_node.mesh
+		if mesh != null:
+			for surface in mesh.get_surface_count():
+				var material := mesh_node.get_active_material(surface)
+				if material is StandardMaterial3D and (material as StandardMaterial3D).albedo_texture != null:
+					return material as StandardMaterial3D
+	for child in node.get_children():
+		var found := _find_textured_material(child)
+		if found != null:
+			return found
+	return null
+
+
 func _tint_edge(node: Node, cell: Vector2i, edge: String) -> void:
+	# Paint a wall only when both rooms share the color, so the change shows up past the door.
 	var style: StringName = _room_style.get(cell, &"")
-	if style == &"":
-		style = _room_style.get(cell + _delta(edge), &"")
+	var other: StringName = _room_style.get(cell + _delta(edge), &"")
+	if style == &"" or style != other:
+		return
 	if style == &"concrete":
 		_tint_rough(node, Color(0.58, 0.64, 0.7))
 	elif style == &"warm":
@@ -565,6 +798,21 @@ func _carve_meeting_room() -> void:
 		_mark(Vector2i(2, z), "e", "none")
 
 
+func _carve_break_rooms() -> void:
+	# West pantry, x -12..-4, z 112..124. The door is the existing opening on (-4, 30).
+	for z in [28, 29, 30]:
+		_mark(Vector2i(-3, z), "e", "none")
+		_mark(Vector2i(-2, z), "e", "wall")
+	_mark(Vector2i(-3, 30), "n", "wall")
+	_mark(Vector2i(-2, 30), "n", "wall")
+	# East pantry, x 24..32, z 208..220. Door from the side corridor.
+	_mark_door(Vector2i(5, 53), "e")
+	for z in [52, 53, 54]:
+		_mark(Vector2i(6, z), "e", "none")
+	_mark(Vector2i(6, 54), "n", "wall")
+	_mark(Vector2i(7, 54), "n", "wall")
+
+
 func _carve_crt_room() -> void:
 	# x -12..-4, z 144..152. One desk against the north wall.
 	_mark(Vector2i(-3, 36), "e", "none")
@@ -600,10 +848,12 @@ func _stairwell() -> void:
 	_rail_run(x1 + 0.08, z0, 0.15, z1, rise + 0.15, rail)
 	_solid("WellRailPost", Vector3(x1 + 0.08, rise + 0.55, 170.6), Vector3(0.05, 1.1, 0.05), rail)
 	_solid("WellRail", Vector3(25.6, rise + 0.95, 169.45), Vector3(3.6, 0.04, 0.04), rail)
-	_solid("WellUpper", Vector3(24.0, 4.3, 159.98), Vector3(8.0, 2.6, 0.16), beige)
-	_solid("WellUpper", Vector3(24.0, 4.3, 172.02), Vector3(8.0, 2.6, 0.16), beige)
-	_solid("WellUpper", Vector3(20.08, 4.3, 166.0), Vector3(0.16, 2.6, 12.0), beige)
-	_solid("WellUpper", Vector3(27.92, 4.3, 166.0), Vector3(0.16, 2.6, 12.0), beige)
+	var band_h := 2.6 + CEILING_LIFT
+	var band_y := 3.0 + band_h * 0.5
+	_solid("WellUpper", Vector3(24.0, band_y, 159.98), Vector3(8.0, band_h, 0.16), beige)
+	_solid("WellUpper", Vector3(24.0, band_y, 172.02), Vector3(8.0, band_h, 0.16), beige)
+	_solid("WellUpper", Vector3(20.08, band_y, 166.0), Vector3(0.16, band_h, 12.0), beige)
+	_solid("WellUpper", Vector3(27.92, band_y, 166.0), Vector3(0.16, band_h, 12.0), beige)
 
 
 func _rail_run(x: float, z0: float, y0: float, z1: float, y1: float, material: Material) -> void:
@@ -641,11 +891,11 @@ func _sloped_bar(x: float, z0: float, y0: float, z1: float, y1: float, material:
 
 func _extra_rooms() -> void:
 	_table(Vector3(27.1, 0.0, 102.8))
-	_office_chair(_geometry, Vector3(27.1, 0.0, 103.7), PI)
-	_office_chair(_geometry, Vector3(26.2, 0.0, 102.2), PI * 0.5)
+	_seat(Vector3(27.1, 0.0, 102.8), "n", 0.0, "swivel")
+	_seat(Vector3(27.1, 0.0, 102.8), "w", 0.0, "swivel")
 	_table(Vector3(-14.0, 0.0, 114.0))
-	_office_chair(_geometry, Vector3(-14.0, 0.0, 114.9), PI)
-	_office_chair(_geometry, Vector3(-13.3, 0.0, 113.5), -PI * 0.5)
+	_seat(Vector3(-14.0, 0.0, 114.0), "n", 0.0, "swivel")
+	_seat(Vector3(-14.0, 0.0, 114.0), "w", 0.0, "swivel")
 	# Bay interior is x 20.1–31.9, z 184.1–199.9. The west door swings to about x 21.1.
 	var bay_x: Array[float] = [22.3, 24.6, 26.9, 29.2]
 	var bay_z: Array[float] = [184.7, 187.5, 191.6, 194.9, 198.0]
@@ -663,6 +913,8 @@ func _build_elevators() -> void:
 	second.name = "ElevatorB"
 	second.build("05", 0.12)
 	_place_node(second, Vector2i(-6, 50), "e")
+	_above_opening(first)
+	_above_opening(second)
 	var marker_a := _elevator_marker("RideA", Vector3(26.5, 0.05, 10.0), PI * 0.5)
 	var marker_b := _elevator_marker("RideB", Vector3(-22.5, 0.05, 202.0), -PI * 0.5)
 	_dress_car(Vector3(26.0, 0.0, 10.0), true)
@@ -794,6 +1046,8 @@ func _red_door(wall_face: Vector3) -> void:
 
 
 func _cooler(at: Vector3, yaw: float) -> void:
+	_bk(BK_COOLER, _geometry, at, yaw)
+	return
 	var root := Node3D.new()
 	root.name = "Cooler"
 	root.position = at
@@ -885,6 +1139,8 @@ func _bit_cylinder(parent: Node3D, origin: Vector3, radius: float, height: float
 
 
 func _fridge(at: Vector3, yaw: float) -> void:
+	_bk(BK_FRIDGE, _geometry, at, yaw)
+	return
 	var root := Node3D.new()
 	root.name = "Fridge"
 	root.position = at
@@ -930,15 +1186,29 @@ func _fridge(at: Vector3, yaw: float) -> void:
 	root.add_child(lamp)
 
 
-func _counter(at: Vector3) -> void:
-	var cabinet := _mat(Color(0.9, 0.9, 0.88), 0.45)
-	var top := _mat(Color(0.12, 0.12, 0.13), 0.35, 0.05)
-	_solid("Counter", at + Vector3(0.0, 0.42, 0.0), Vector3(3.4, 0.84, 0.58), cabinet)
-	_solid("CounterTop", at + Vector3(0.0, 0.86, 0.0), Vector3(3.5, 0.04, 0.62), top)
+func _counter(at: Vector3, yaw: float = 0.0) -> void:
+	var root := Node3D.new()
+	root.name = "Counter"
+	root.position = at
+	root.rotation.y = yaw
+	_geometry.add_child(root)
+	var cabinet := _mat(Color(0.93, 0.93, 0.9), 0.48)
+	var seam := _mat(Color(0.22, 0.22, 0.23), 0.55)
+	var top := _mat(Color(0.1, 0.1, 0.11), 0.32, 0.08)
+	_part(root, Vector3(0.0, 0.42, 0.0), Vector3(3.2, 0.82, 0.56), cabinet)
+	_part(root, Vector3(0.0, 0.86, 0.0), Vector3(3.36, 0.045, 0.64), top)
+	for i in 4:
+		var x := -1.2 + float(i) * 0.8
+		_bit(root, Vector3(x, 0.42, 0.292), Vector3(0.018, 0.72, 0.012), seam)
+		_bit(root, Vector3(x + 0.22, 0.55, 0.3), Vector3(0.08, 0.016, 0.012), seam)
 
 
 func _extinguisher(at: Vector3) -> void:
+	_bk(BK_EXTINGUISHER, _geometry, at, 0.0)
+	return
 	var root := Node3D.new()
+	_prop_index += 1
+	root.name = "Extinguisher%d" % _prop_index
 	root.position = at
 	_geometry.add_child(root)
 	var red := _mat(Color(0.7, 0.08, 0.06), 0.4, 0.1)
@@ -948,6 +1218,8 @@ func _extinguisher(at: Vector3) -> void:
 
 
 func _folding_chair(at: Vector3, yaw: float) -> void:
+	_bk(BK_FOLD_CHAIR, _geometry, at, yaw)
+	return
 	var root := Node3D.new()
 	root.position = at
 	root.rotation.y = yaw
@@ -960,6 +1232,8 @@ func _folding_chair(at: Vector3, yaw: float) -> void:
 
 
 func _crt(parent: Node3D, at: Vector3, yaw: float) -> void:
+	_bk(BK_CRT, parent, at, yaw, 0.42)
+	return
 	var root := Node3D.new()
 	root.name = "Crt"
 	root.position = at
@@ -974,12 +1248,12 @@ func _crt(parent: Node3D, at: Vector3, yaw: float) -> void:
 
 
 func _keyboard(parent: Node3D, at: Vector3) -> void:
-	var beige := _mat(Color(0.75, 0.72, 0.62), 0.6)
-	_bit(parent, at, Vector3(0.4, 0.02, 0.14), beige)
-	_bit(parent, at + Vector3(0.22, 0.01, 0.08), Vector3(0.06, 0.02, 0.09), beige)
+	_bk(BK_KEYBOARD, parent, at, 0.0)
 
 
 func _tower(parent: Node3D, at: Vector3, yaw: float) -> void:
+	_bk(BK_TOWER, parent, at, yaw)
+	return
 	var root := Node3D.new()
 	root.name = "Tower"
 	root.position = at
@@ -994,6 +1268,8 @@ func _tower(parent: Node3D, at: Vector3, yaw: float) -> void:
 
 
 func _office_chair(parent: Node3D, at: Vector3, yaw: float) -> void:
+	_bk(BK_OFFICE_CHAIR, parent, at, yaw)
+	return
 	var root := Node3D.new()
 	root.name = "OfficeChair"
 	root.position = at
@@ -1047,10 +1323,12 @@ func _rack(at: Vector3, yaw: float, alarm: bool, blue: Material, red: Material) 
 
 
 func _meeting_room() -> void:
-	_conference_table(Vector3(12.0, 0.0, 134.0))
-	for z in [131.2, 134.0, 136.8]:
-		_task_chair(Vector3(10.85, 0.0, z), PI * 0.5)
-		_task_chair(Vector3(13.15, 0.0, z), -PI * 0.5)
+	var meet := Vector3(12.0, 0.0, 134.0)
+	_conference_table(meet)
+	_seat(meet, "n", -0.42, "swivel")
+	_seat(meet, "n", 0.42, "swivel")
+	_seat(meet, "s", -0.42, "swivel")
+	_seat(meet, "s", 0.42, "swivel")
 	var bezel := _mat(Color(0.05, 0.05, 0.06), 0.4, 0.3)
 	var screen := _mat(Color(0.01, 0.02, 0.03), 0.12, 0.0, Color(0.05, 0.08, 0.12), 0.35)
 	_solid("MeetScreen", Vector3(15.9, 1.65, 134.0), Vector3(0.06, 1.15, 2.3), bezel)
@@ -1069,12 +1347,13 @@ func _meeting_room() -> void:
 
 
 func _crt_room() -> void:
-	_table(Vector3(-8.0, 0.0, 151.15))
-	_crt(_geometry, Vector3(-8.0, 0.78, 151.05), PI)
-	_keyboard(_geometry, Vector3(-8.05, 0.8, 150.75))
+	var crt_desk := Vector3(-8.0, 0.0, 151.15)
+	_table(crt_desk)
+	_crt(_geometry, Vector3(-8.0, 0.82, 151.05), PI)
+	_keyboard(_geometry, Vector3(-8.05, 0.82, 150.75))
 	_tower(_geometry, Vector3(-6.95, 0.0, 151.2), PI)
-	_printer(_geometry, Vector3(-9.15, 0.78, 151.1))
-	_office_chair(_geometry, Vector3(-8.0, 0.0, 150.15), 0.0)
+	_printer(_geometry, Vector3(-8.35, 0.82, 151.15))
+	_seat(crt_desk, "s", 0.0, "swivel")
 	var tube := OmniLight3D.new()
 	tube.position = Vector3(-8.0, 2.55, 150.4)
 	tube.light_color = Color(0.95, 0.94, 0.85)
@@ -1222,10 +1501,82 @@ func _solid(label: String, origin: Vector3, size: Vector3, material: Material) -
 
 
 func _table(at: Vector3) -> void:
-	_prop(TABLE, at)
+	_spawn_table(at)
+
+
+# The conference top is offset: it runs from local x -0.60 to 1.44 and z -0.54 to 0.62.
+# Chair models face +Z, and the front of the seat is at the origin, so the origin sits just outside the top.
+func _seat(table: Vector3, side: String, along: float, kind: String) -> void:
+	var at := table
+	var yaw := 0.0
+	var clear := 0.32
+	match side:
+		"n":
+			at += Vector3(0.42 + along, 0.0, 0.64 + clear)
+			yaw = PI
+		"s":
+			at += Vector3(0.42 + along, 0.0, -0.56 - clear)
+			yaw = 0.0
+		"e":
+			at += Vector3(1.46 + clear, 0.0, 0.04 + along)
+			yaw = -PI * 0.5
+		_:
+			at += Vector3(-0.62 - clear, 0.0, 0.04 + along)
+			yaw = PI * 0.5
+	if kind == "swivel":
+		_office_chair(_geometry, at, yaw)
+	elif kind == "fold":
+		_folding_chair(at, yaw)
+	else:
+		_chair(at, yaw)
+
+
+func _spawn_table(at: Vector3) -> void:
+	var node := _bk(BK_TABLE, _geometry, at, 0.0)
+	_paint_table(node, _table_serial % 3)
+	_table_serial += 1
+
+
+func _paint_table(root: Node, kind: int) -> void:
+	var albedo := Color(0.74, 0.75, 0.77)
+	var metal := 0.78
+	var rough := 0.28
+	if kind == 1:
+		albedo = Color(0.43, 0.26, 0.14)
+		metal = 0.0
+		rough = 0.6
+	elif kind == 2:
+		albedo = Color(0.07, 0.07, 0.075)
+		metal = 0.22
+		rough = 0.42
+	var pending: Array[Node] = [root]
+	while not pending.is_empty():
+		var node: Node = pending.pop_back()
+		if node is MeshInstance3D:
+			var mesh_node := node as MeshInstance3D
+			if mesh_node.material_override is StandardMaterial3D:
+				mesh_node.material_override = _table_finish(mesh_node.material_override as StandardMaterial3D, albedo, metal, rough)
+			if mesh_node.mesh != null:
+				for surface in mesh_node.mesh.get_surface_count():
+					var current := mesh_node.get_active_material(surface)
+					if current is StandardMaterial3D:
+						mesh_node.set_surface_override_material(surface, _table_finish(current as StandardMaterial3D, albedo, metal, rough))
+		for child in node.get_children():
+			pending.append(child)
+
+
+func _table_finish(source: StandardMaterial3D, albedo: Color, metal: float, rough: float) -> StandardMaterial3D:
+	var copy := source.duplicate() as StandardMaterial3D
+	copy.albedo_texture = null
+	copy.albedo_color = albedo
+	copy.metallic = metal
+	copy.roughness = rough
+	return copy
 
 
 func _chair(at: Vector3, yaw: float = 0.0) -> void:
+	_bk(BK_WOOD_CHAIR, _geometry, at, yaw)
+	return
 	var root := Node3D.new()
 	root.name = "Chair"
 	root.position = at
@@ -1247,7 +1598,7 @@ func _cubicle(at: Vector3, yaw: float = 0.0) -> void:
 		[Vector3(0.0, 0.7, 0.0), Vector3(1.9, 1.4, 0.1)],
 		[Vector3(-0.9, 0.76, 0.75), Vector3(0.1, 1.28, 1.52)],
 		[Vector3(0.9, 0.76, 0.75), Vector3(0.1, 1.28, 1.52)],
-		[Vector3(0.0, 0.38, 0.52), Vector3(1.42, 0.76, 0.7)],
+		[Vector3(0.0, 0.42, 0.52), Vector3(1.42, 0.84, 0.7)],
 	]:
 		var body := StaticBody3D.new()
 		body.position = block[0]
@@ -1257,9 +1608,9 @@ func _cubicle(at: Vector3, yaw: float = 0.0) -> void:
 		collision.shape = shape
 		body.add_child(collision)
 		node.add_child(body)
-	_crt(node, Vector3(0.0, 0.76, 0.46), 0.0)
-	_keyboard(node, Vector3(0.02, 0.775, 0.7))
-	_office_chair(node, Vector3(0.1, 0.0, 1.32), PI)
+	_crt(node, Vector3(0.0, 0.84, 0.46), 0.0)
+	_keyboard(node, Vector3(0.02, 0.84, 0.7))
+	_office_chair(node, Vector3(0.1, 0.0, 1.18), PI)
 
 
 func _prop(packed: PackedScene, at: Vector3) -> Node3D:
@@ -1267,6 +1618,63 @@ func _prop(packed: PackedScene, at: Vector3) -> Node3D:
 	node.position = at
 	_geometry.add_child(node)
 	return node
+
+
+func _bk(packed: PackedScene, parent: Node, at: Vector3, yaw: float, fit_height: float = -1.0) -> Node3D:
+	var node := packed.instantiate() as Node3D
+	node.position = at
+	node.rotation.y = yaw
+	parent.add_child(node)
+	if fit_height > 0.0:
+		var box := _local_aabb(node)
+		if box.size.y > 0.001:
+			var fitted := fit_height / box.size.y
+			node.scale = Vector3(fitted, fitted, fitted)
+			node.position.y = at.y - box.position.y * fitted
+	_box_around(node)
+	return node
+
+
+func _box_around(root: Node3D) -> void:
+	var box := _local_aabb(root)
+	if box.size.length() < 0.001:
+		return
+	var body := StaticBody3D.new()
+	body.position = box.get_center()
+	var collision := CollisionShape3D.new()
+	var shape := BoxShape3D.new()
+	shape.size = box.size
+	collision.shape = shape
+	body.add_child(collision)
+	root.add_child(body)
+
+
+func _local_aabb(root: Node3D) -> AABB:
+	var merged := AABB()
+	var has := false
+	var pending: Array[Node] = [root]
+	while not pending.is_empty():
+		var node: Node = pending.pop_back()
+		if node is MeshInstance3D:
+			var mesh_node := node as MeshInstance3D
+			if mesh_node.mesh != null:
+				var ab := mesh_node.get_aabb()
+				var to_root := root.global_transform.affine_inverse() * mesh_node.global_transform
+				for i in 8:
+					var corner := Vector3(
+						ab.position.x if (i & 1) == 0 else ab.end.x,
+						ab.position.y if (i & 2) == 0 else ab.end.y,
+						ab.position.z if (i & 4) == 0 else ab.end.z
+					)
+					var point := to_root * corner
+					if not has:
+						merged = AABB(point, Vector3.ZERO)
+						has = true
+					else:
+						merged = merged.expand(point)
+		for child in node.get_children():
+			pending.append(child)
+	return merged
 
 
 func _dim_emissive(node: Node) -> void:
@@ -1326,8 +1734,11 @@ func _furnish_half() -> void:
 	for index in rooms.size():
 		if index % 2 == 1:
 			# A share of the bare rooms becomes an office with a computer.
+			# The rest gets a table: conference (photo 25) or a plain table (photo 18).
 			if posmod(index, 4) == 1:
 				_furnish_room(rooms[index], 2 if posmod(index, 8) == 1 else 3)
+			else:
+				_furnish_room(rooms[index], 6 if posmod(index, 8) == 3 else 7)
 			continue
 		_furnish_room(rooms[index], placed)
 		placed += 1
@@ -1367,6 +1778,10 @@ func _skip_furnish(cell: Vector2i) -> bool:
 		return true
 	if cell.x >= -3 and cell.x <= -2 and cell.y >= 36 and cell.y <= 37:
 		return true
+	if cell.x >= -3 and cell.x <= -2 and cell.y >= 28 and cell.y <= 30:
+		return true
+	if cell.x >= 6 and cell.x <= 7 and cell.y >= 52 and cell.y <= 54:
+		return true
 	return false
 
 
@@ -1386,24 +1801,32 @@ func _is_solid_edge(kind: String) -> bool:
 func _furnish_room(room: Array, variant: int) -> void:
 	var cell := _anchor_cell(room)
 	var pos := _anchor_pos(cell)
+	if variant == 6:
+		_small_conference(pos)
+		return
+	if variant == 7:
+		_table(pos)
+		_seat(pos, "n", 0.0, "fold")
+		_seat(pos, "s", 0.0, "fold")
+		return
 	match variant % 6:
 		0:
 			_office_chair(_geometry, pos, _into_room_yaw(cell))
 		1:
 			_table(pos)
-			_chair(pos + Vector3(0.0, 0.0, 0.7), PI)
-			_chair(pos + Vector3(0.7, 0.0, 0.0), -PI * 0.5)
+			_seat(pos, "n", 0.0, "wood")
+			_seat(pos, "w", 0.0, "wood")
 		2:
 			_table(pos)
-			_crt(_geometry, pos + Vector3(-0.1, 0.78, -0.12), 0.0)
-			_keyboard(_geometry, pos + Vector3(-0.05, 0.8, 0.18))
+			_crt(_geometry, pos + Vector3(-0.1, 0.82, -0.12), 0.0)
+			_keyboard(_geometry, pos + Vector3(-0.05, 0.82, 0.18))
 			_tower(_geometry, pos + Vector3(0.85, 0.0, -0.1), 0.0)
-			_office_chair(_geometry, pos + Vector3(-0.15, 0.0, 0.75), PI)
+			_seat(pos, "n", 0.0, "swivel")
 		3:
 			var edge := _back_wall(cell)
 			if edge == "":
 				_table(pos)
-				_office_chair(_geometry, pos + Vector3(0.0, 0.0, 0.7), PI)
+				_seat(pos, "n", 0.0, "swivel")
 			else:
 				_cubicle_against(cell, edge)
 		4:
@@ -1417,11 +1840,13 @@ func _furnish_room(room: Array, variant: int) -> void:
 			else:
 				_folding_chair(pos + Vector3(-0.4, 0.0, 0.15), 0.4)
 				_folding_chair(pos + Vector3(0.35, 0.0, -0.2), 2.6)
-				_extinguisher(_corner_pos(cell))
+				var spot := _extinguisher_spot(cell)
+				if not spot.is_empty():
+					_extinguisher(spot[0] as Vector3)
 		_:
 			_table(pos)
-			_office_chair(_geometry, pos + Vector3(-0.65, 0.0, 0.1), PI * 0.5)
-			_office_chair(_geometry, pos + Vector3(0.65, 0.0, 0.1), -PI * 0.5)
+			_seat(pos, "n", 0.0, "swivel")
+			_seat(pos, "w", 0.0, "swivel")
 
 
 func _anchor_cell(room: Array) -> Vector2i:
@@ -1533,6 +1958,8 @@ func _corner_pos(cell: Vector2i) -> Vector3:
 
 
 func _ladder(at: Vector3) -> void:
+	_bk(BK_LADDER, _geometry, at, 0.0)
+	return
 	# Aluminum A-frame: two sloping sides, rungs, top cap, spreaders, rubber feet.
 	var root := Node3D.new()
 	root.name = "StepLadder"
@@ -1582,15 +2009,14 @@ func _ladder_rail(parent: Node3D, a: Vector3, b: Vector3, material: Material) ->
 
 
 func _security_camera(at: Vector3) -> void:
-	_solid("CameraBody", at, Vector3(0.16, 0.12, 0.28), _metal_mat)
-	_solid("CameraLed", at + Vector3(0.0, -0.02, 0.12), Vector3(0.035, 0.035, 0.03), _red_mat)
+	var node := _bk(BK_CAMERA, _geometry, at, 0.0)
 	var led := OmniLight3D.new()
 	led.name = "CameraLedLight"
-	led.position = at
+	led.position = Vector3(0.0, 0.1, 0.08)
 	led.light_color = Color(1.0, 0.12, 0.08)
 	led.light_energy = 0.35
 	led.omni_range = 0.8
-	_geometry.add_child(led)
+	node.add_child(led)
 
 
 func _scatter_reference_props() -> void:
@@ -1602,6 +2028,8 @@ func _scatter_reference_props() -> void:
 
 
 func _potted_tree(at: Vector3) -> void:
+	_bk(BK_TREE, _geometry, at, 0.0)
+	return
 	var root := Node3D.new()
 	root.name = "PottedTree"
 	root.position = at
@@ -1620,6 +2048,8 @@ func _potted_tree(at: Vector3) -> void:
 
 
 func _broadleaf_plant(at: Vector3) -> void:
+	_bk(BK_PLANT, _geometry, at, 0.0)
+	return
 	var root := Node3D.new()
 	root.name = "Broadleaf"
 	root.position = at
@@ -1638,6 +2068,8 @@ func _broadleaf_plant(at: Vector3) -> void:
 
 
 func _metal_shelf(at: Vector3, yaw: float) -> void:
+	_bk(BK_SHELF, _geometry, at, yaw)
+	return
 	var root := Node3D.new()
 	root.name = "MetalShelf"
 	root.position = at
@@ -1653,6 +2085,8 @@ func _metal_shelf(at: Vector3, yaw: float) -> void:
 
 
 func _office_copier(at: Vector3, yaw: float) -> void:
+	_bk(BK_COPIER, _geometry, at, yaw)
+	return
 	var root := Node3D.new()
 	root.name = "Copier"
 	root.position = at
@@ -1670,6 +2104,8 @@ func _office_copier(at: Vector3, yaw: float) -> void:
 
 
 func _filing_cabinet(at: Vector3, yaw: float) -> void:
+	_bk(BK_CABINET, _geometry, at, yaw)
+	return
 	var root := Node3D.new()
 	root.name = "FilingCabinet"
 	root.position = at
@@ -1683,7 +2119,34 @@ func _filing_cabinet(at: Vector3, yaw: float) -> void:
 	_bit(root, Vector3(0.16, 0.9, 0.3), Vector3(0.025, 0.018, 0.01), _metal_mat)
 
 
+func _small_conference(at: Vector3) -> void:
+	_conference_table(at)
+	_seat(at, "n", -0.4, "swivel")
+	_seat(at, "n", 0.4, "swivel")
+	_seat(at, "s", -0.4, "swivel")
+	_seat(at, "s", 0.4, "swivel")
+	return
+	var root := Node3D.new()
+	root.name = "SmallConference"
+	root.position = at
+	_geometry.add_child(root)
+	var grey := _mat(Color(0.62, 0.64, 0.66), 0.38, 0.04)
+	var stripe := _mat(Color(0.46, 0.28, 0.16), 0.5)
+	var leg := _mat(Color(0.34, 0.36, 0.38), 0.32, 0.65)
+	_part(root, Vector3(0.0, 0.76, 0.0), Vector3(1.2, 0.05, 2.2), grey)
+	_part(root, Vector3(0.0, 0.79, 0.0), Vector3(0.12, 0.012, 1.8), stripe)
+	for end_z in [-0.85, 0.85]:
+		_splayed_leg(root, Vector3(-0.16, 0.0, end_z), -0.42, leg)
+		_splayed_leg(root, Vector3(0.16, 0.0, end_z), 0.42, leg)
+	_task_chair(at + Vector3(0.85, 0.0, 0.0), -PI * 0.5)
+	_task_chair(at + Vector3(-0.85, 0.0, 0.0), PI * 0.5)
+	_task_chair(at + Vector3(0.0, 0.0, 1.25), PI)
+	_task_chair(at + Vector3(0.0, 0.0, -1.25), 0.0)
+
+
 func _conference_table(at: Vector3) -> void:
+	_spawn_table(at)
+	return
 	var root := Node3D.new()
 	root.name = "ConferenceTable"
 	root.position = at
@@ -1712,6 +2175,8 @@ func _splayed_leg(parent: Node3D, foot: Vector3, top_x: float, material: Materia
 
 
 func _task_chair(at: Vector3, yaw: float) -> void:
+	_bk(BK_OFFICE_CHAIR, _geometry, at, yaw)
+	return
 	var root := Node3D.new()
 	root.name = "TaskChair"
 	root.position = at
@@ -1783,9 +2248,12 @@ func _exit_sign(at: Vector3) -> void:
 	sign.modulate = Color(1.0, 0.18, 0.12)
 	sign.outline_modulate = Color(0.2, 0.0, 0.0)
 	sign.outline_size = 12
+	# Face back into the room. The other way reads EXIT backwards, as TIXE.
+	sign.rotation.y = PI
+	sign.position.y = 3.12
 	_geometry.add_child(sign)
 	var glow := OmniLight3D.new()
-	glow.position = at
+	glow.position = sign.position
 	glow.light_color = Color(1.0, 0.2, 0.12)
 	glow.light_energy = 0.6
 	glow.omni_range = 1.6

@@ -9,7 +9,9 @@ This document is the setup guide for the repository: install the tools, open the
 | Tool | Role | Version used here |
 |---|---|---|
 | [Godot](https://godotengine.org/download) | Game engine and scene editor | 4.7.2, Forward+ |
-| [Blender](https://www.blender.org/download/) | Meshes, modular kit pieces, doors, props | Current stable |
+| [Blender](https://www.blender.org/download/) | Meshes, modular kit pieces, doors, props | 5.2 LTS |
+| Blendkit addon for Blender | Browse and download the Blendkit catalog inside Blender | 3.21.3 |
+| Blendkit addon for Godot | Same catalog, from the Godot editor. Enabled in `project.godot` | 0.7.2 |
 | [GIMP](https://www.gimp.org/downloads/) | Textures, decals, grunge, window dirt | Current stable |
 | [Audacity](https://www.audacityteam.org/download/) | Footsteps, door sounds, rain, HVAC, thunder | Current stable |
 
@@ -26,6 +28,9 @@ floor-404/
   .cursorrules                     Editor rules for GDScript
   godot_project/                   The Godot project (this is res://)
     project.godot
+    addons/blendkit/             Godot Blendkit plugin 0.7.2
+    models/blendkit/             Free Blendkit props used on the floor
+    models/office/               Walls, floors, doors, cubicle, columns
     scenes/
     scripts/
   assets_src/                      Blender, GIMP, and Audacity source files
@@ -169,6 +174,46 @@ assets_src/blender/props/
 godot_project/assets/models/
 ```
 
+### Blendkit
+
+Blendkit (the current name of BlenderKit) is an online catalog, not a pack stored in this repo. The Blender addon 3.21.3 and the Godot addon 0.7.2 (`addons/blendkit/`, already enabled) both talk to [blendkit.com](https://www.blendkit.com) and see the same assets. Nothing is on disk until it is downloaded.
+
+Godot needs the **glTF** file (`gltf_godot`, a `.glb`). The catalog entry named `resolution_1K` is a `.blend`, and Godot does not import that. For this floor the glTF was downloaded, then any embedded image longer than 1024 px was scaled to 1K in Blender and the file was exported again. That cap is for the GTX 950M. The results are in `godot_project/models/blendkit/`.
+
+`scripts/office_level.gd` instances those scenes and adds a box collision from the mesh bounds. The catalog models do not bring gameplay collision with them.
+
+Props that now come from Blendkit:
+
+| File | Used as |
+|---|---|
+| `office_chair.glb` | Swivel chair with wheels. Every computer desk uses this one. |
+| `wooden_chair.glb` | Side chair at plain tables |
+| `folding_chair.glb` | Break-room and empty-room chairs |
+| `conference.glb` | Every table: break rooms, meeting room, and desk stands. About 2.0 × 1.2 m, top near 0.82 m. |
+| `crt.glb` | Old monitor, scaled to 0.42 m tall |
+| `keyboard.glb` | Desk keyboard |
+| `tower.glb` | Small desktop case |
+| `cooler.glb` | Water dispenser |
+| `fridge.glb` | Closed steel fridge. The old open fridge with drinks is gone. |
+| `extinguisher.glb` | Fire extinguishers along the walls |
+| `ladder.glb` | Folding ladder |
+| `plant.glb` | Snake plant |
+| `tree.glb` | Potted palm |
+| `shelf.glb` | Standing shelf |
+| `copier.glb` | Floor copier |
+| `cabinet.glb` | Filing cabinet |
+| `camera.glb` | Security camera |
+
+The shell is still the office kit: walls, floors, ceilings, doors, elevators, and columns. Cubicle stalls, break-room counters, server racks, and the small printer on the CRT desk stayed as they were.
+
+After import, three fits were made so the models sit in the rooms:
+
+- The office-chair column was shortened. The seat is about 0.50 m, and the wheels stay on the floor. Wooden and folding chairs lost a little leg.
+- Table tops and the cubicle desktop were raised about 8 cm. Monitors and keyboards moved up with the surface.
+- Tables cycle three finishes, one after another: silver, brown, black. Chairs are placed just outside the real tabletop, facing it. A chair at a computer is always the wheeled one.
+
+To drop another catalog model into the floor: download the glTF (from the Godot Blendkit dock, or the Blender addon), save the `.glb` under `models/blendkit/`, and if a texture is over 1024 px scale it in Blender and export glTF with Y up. Then preload it from `office_level.gd`.
+
 ## 6. GIMP
 
 Paint or assemble textures, then export images Godot can import.
@@ -219,14 +264,14 @@ The layout is generated, not painted into `office_level.tscn`. Rooms worth knowi
 
 | Place | What you find |
 |---|---|
-| Break room | Tables, water cooler, glass-front fridge stocked with cans, bottles, sandwiches, and chocolate. The fridge sits on the north wall, off the door. |
-| Cubicle bays | Partition stalls with a CRT, keyboard, and a wheeled chair. The north bay stays inside its walls and clear of the west door. |
+| Break rooms | Three of them. Blendkit tables (silver, brown, or black), wooden or folding chairs, a water dispenser, and a closed steel fridge on the first one. Counters stay on the wall, clear of the door. The ceiling lights in these rooms are all on. |
+| Cubicle bays | Kit partitions, with a Blendkit CRT, keyboard, and wheeled chair pulled up to the desk. The north bay stays inside its walls and clear of the west door. |
 | Column room | One wheeled chair in the open floor. |
-| Security | Desk with beige CRT monitors and a desktop tower. |
-| Stairs | Climbable flight to a red door, plus a taller concrete stairwell. |
+| Security | Desk with Blendkit CRT monitors, a desktop case, and two wheeled chairs. |
+| Stairs | Climbable flight to a red door, plus a taller concrete stairwell. A folding ladder stands in some rooms. |
 | Elevators | Two cars in different wings. E on the doors opens them. E on the 15-button panel rides to the other car. |
 | Server room | Black racks, blue status lights, one bay lit red. Concrete floor. West side of the north wing. |
-| Meeting room | Long table, wheeled chairs, a large screen on the east wall. |
-| CRT room | One desk: beige monitor, keyboard, mouse, tower, and a printer. |
+| Meeting room | Blendkit conference table, four wheeled chairs, a large screen on the east wall. |
+| CRT room | One Blendkit table: CRT, keyboard, desktop case, the small kit printer, and a wheeled chair. |
 
 Reference photos live in `docs/reference/level4/`.

@@ -14,9 +14,9 @@ var last_safe_transform := Transform3D.IDENTITY:
 		_capture_safe_pitch()
 
 const PITCH_LIMIT_DEGREES := 89.0
-const EYE_HEIGHT := 1.62
+const EYE_HEIGHT := 1.58
 const BODY_RADIUS := 0.3
-const BODY_HEIGHT := 1.75
+const BODY_HEIGHT := 1.70
 
 @export_group("Movement")
 @export_range(0.5, 12.0, 0.1, "suffix:m/s") var move_speed: float = 3.0
