@@ -47,10 +47,15 @@ const BK_WALL_TV := preload("res://models/blendkit/wall_tv.glb")
 const BK_GLASS_BOARD := preload("res://models/blendkit/glass_board.glb")
 const BK_WHITEBOARD := preload("res://models/blendkit/whiteboard.glb")
 const BK_NOTES := preload("res://models/blendkit/sticky_notes.glb")
+const BK_TOILET := preload("res://models/blendkit/toilet.glb")
+const BK_SINK := preload("res://models/blendkit/sink.glb")
+const BK_MIRROR := preload("res://models/blendkit/mirror.glb")
+const TILE_TEX := preload("res://models/blendkit/white_tiles.jpg")
 const ALARM_BEACON := preload("res://scripts/alarm_beacon.gd")
 const ELEVATOR_DOORS := preload("res://scripts/elevator_doors.gd")
 const ELEVATOR_PANEL := preload("res://scripts/elevator_panel.gd")
 const FLOOR_EXIT := preload("res://scripts/floor_exit.gd")
+const DOOR_SCRIPT := preload("res://scripts/door.gd")
 
 var _cells: Array[Vector2i] = []
 var _cell_set: Dictionary = {}
@@ -70,6 +75,10 @@ var _desk_serial := 0
 var _wall_paint: StandardMaterial3D
 
 var _cubicle_mat: StandardMaterial3D
+var _cubicle_spots: Array[Dictionary] = []
+var _shelf_spots: Array[Dictionary] = []
+var _cabinet_spots: Array[Vector3] = []
+var _chair_spots: Array[Vector3] = []
 var _desk_mat: StandardMaterial3D
 var _metal_mat: StandardMaterial3D
 var _red_mat: StandardMaterial3D
@@ -234,6 +243,11 @@ func _build_lights() -> void:
 			glow.light_energy = 2.4
 			glow.omni_range = 8.0
 			continue
+		if _is_restroom(cell):
+			glow.light_color = Color(0.94, 0.96, 0.97)
+			glow.light_energy = 2.1
+			glow.omni_range = 9.0
+			continue
 		# Half the floor stays dim: a burnt tube, or one that flickers.
 		var tone := posmod(cell.x * 5 + cell.y * 3, 4)
 		if tone == 0:
@@ -289,6 +303,7 @@ func _build_props() -> void:
 	# East wall of the north corridor, beside the night windows. The old sign here read backwards.
 	_alarm_beacon(Vector3(7.9, 2.85, 226.85), -PI * 0.5)
 	_electrical_rooms()
+	_build_restrooms()
 
 
 func _break_room() -> void:
@@ -340,7 +355,7 @@ func _place_more_cameras() -> void:
 			break
 		if posmod(cell.x * 5 + cell.y * 2, 13) != 4:
 			continue
-		if _kind_on(cell, "n") == "door":
+		if _kind_on(cell, "n") == "door" or _is_restroom(cell):
 			continue
 		_security_camera(Vector3(cell.x * CELL + 0.35, 2.85, (cell.y + 1) * CELL - 0.22))
 		placed += 1
@@ -360,6 +375,8 @@ func _place_extinguishers() -> void:
 
 
 func _extinguisher_spot(cell: Vector2i) -> Array:
+	if _is_restroom(cell):
+		return []
 	var inset := 0.22
 	var along := 0.42
 	var origin := Vector3(cell.x * CELL, 0.0, cell.y * CELL)
@@ -512,6 +529,7 @@ func _expand_floor() -> void:
 	_carve_crt_room()
 	_carve_break_rooms()
 	_carve_electrical()
+	_carve_restrooms()
 	_mark_door(Vector2i(3, 7), "e")
 	_mark(Vector2i(3, 6), "e", "wall")
 	_mark(Vector2i(3, 8), "e", "wall")
@@ -856,6 +874,24 @@ func _carve_electrical() -> void:
 	_mark(Vector2i(6, 21), "n", "wall")
 	_mark(Vector2i(6, 22), "n", "wall")
 	_mark(Vector2i(6, 22), "e", "wall")
+
+
+func _carve_restrooms() -> void:
+	# Two suites on the east side of the central corridor. Each suite is split
+	# into a south room (door off the west corridor) and a north room (door off
+	# the east corridor). The cross-walls of the wing already close the ends.
+	_mark(Vector2i(2, 21), "n", "wall")
+	_mark(Vector2i(3, 21), "n", "wall")
+	_mark(Vector2i(2, 45), "n", "wall")
+	_mark(Vector2i(3, 45), "n", "wall")
+
+
+func _is_restroom(cell: Vector2i) -> bool:
+	if cell.x < 2 or cell.x > 3:
+		return false
+	if cell.y >= 20 and cell.y <= 23:
+		return true
+	return cell.y >= 44 and cell.y <= 47
 
 
 func _carve_crt_room() -> void:
@@ -1636,10 +1672,9 @@ func _table(at: Vector3) -> void:
 
 # The conference top is offset: it runs from local x -0.60 to 1.44 and z -0.54 to 0.62.
 # Chair models face +Z, and the front of the seat is at the origin, so the origin sits just outside the top.
-func _seat(table: Vector3, side: String, along: float, kind: String) -> void:
+func _seat(table: Vector3, side: String, along: float, kind: String, clear: float = 0.32) -> void:
 	var at := table
 	var yaw := 0.0
-	var clear := 0.32
 	match side:
 		"n":
 			at += Vector3(0.42 + along, 0.0, 0.64 + clear)
@@ -1653,6 +1688,13 @@ func _seat(table: Vector3, side: String, along: float, kind: String) -> void:
 		_:
 			at += Vector3(-0.62 - clear, 0.0, 0.04 + along)
 			yaw = PI * 0.5
+	var reach := 0.82 if kind == "swivel" else 0.36
+	var wide := 0.5 if kind == "swivel" else 0.26
+	var gap := 1.15 if kind == "swivel" else 0.75
+	at = _move_chair_clear(at, yaw, table, reach, wide, gap)
+	if at.y < -0.5:
+		return
+	_chair_spots.append(at)
 	if kind == "swivel":
 		_office_chair(_geometry, at, yaw)
 	elif kind == "fold":
@@ -1664,10 +1706,13 @@ func _seat(table: Vector3, side: String, along: float, kind: String) -> void:
 func _spawn_table(at: Vector3) -> void:
 	var node := _bk(BK_TABLE, _geometry, at, 0.0)
 	_paint_table(node, _table_serial % 3)
+	var keep_folder := _table_serial % 2 == 0
 	_table_serial += 1
+	if not keep_folder:
+		return
 	var top := _mesh_max_y(node)
-	var folder := _bk(BK_FOLDER, node, Vector3(0.95, top - node.global_position.y, 0.22), 0.35)
-	_sit_on_floor(folder, top)
+	# Laid flat. The spine stays at this point and the cover runs toward -X, inside the top.
+	_flat_folder(node, Vector3(0.58, top - node.global_position.y, 0.04))
 
 
 func _paint_table(root: Node, kind: int) -> void:
@@ -1707,6 +1752,86 @@ func _table_finish(source: StandardMaterial3D, albedo: Color, metal: float, roug
 	return copy
 
 
+func _move_chair_clear(at: Vector3, yaw: float, table: Vector3, reach: float, wide: float, gap: float) -> Vector3:
+	if not _chair_hits_wall(at, yaw, reach, wide) and not _chair_on_table(at, yaw, table):
+		return at
+	# Step into the open floor, beside the table, clear of the other chairs.
+	var facing := Vector3(sin(yaw), 0.0, cos(yaw))
+	var right := Vector3(facing.z, 0.0, -facing.x)
+	var away := -facing
+	var along_steps: Array[float] = [0.4, 0.9, 1.4, 2.0, 0.0]
+	var side_steps: Array[float] = [1.4, -1.4, 2.3, -2.3, 3.1, -3.1]
+	for along in along_steps:
+		for side in side_steps:
+			var spot := at + away * along + right * side
+			if _chair_hits_wall(spot, yaw, reach, wide) or _chair_on_table(spot, yaw, table):
+				continue
+			if not _clear_of_chairs(spot, gap):
+				continue
+			return spot
+	return Vector3(0.0, -1.0, 0.0)
+
+
+func _chair_hits_wall(at: Vector3, yaw: float, reach: float, wide: float) -> bool:
+	var co := cos(yaw)
+	var si := sin(yaw)
+	var locals: Array[Vector3] = [
+		Vector3(0.0, 0.0, -reach),
+		Vector3(-wide, 0.0, -reach * 0.5),
+		Vector3(wide * 0.6, 0.0, -reach * 0.5),
+	]
+	for local in locals:
+		var world := at + Vector3(local.x * co + local.z * si, 0.0, -local.x * si + local.z * co)
+		if _inside_wall(world):
+			return true
+	return false
+
+
+func _inside_wall(at: Vector3) -> bool:
+	var cell := Vector2i(int(floor(at.x / CELL)), int(floor(at.z / CELL)))
+	if not _cell_set.has(cell):
+		return true
+	var lx := at.x - float(cell.x) * CELL
+	var lz := at.z - float(cell.y) * CELL
+	var limit := 0.14
+	if _is_solid_edge(_kind_on(cell, "w")) and lx < limit:
+		return true
+	if _is_solid_edge(_kind_on(cell, "e")) and lx > CELL - limit:
+		return true
+	if _is_solid_edge(_kind_on(cell, "s")) and lz < limit:
+		return true
+	if _is_solid_edge(_kind_on(cell, "n")) and lz > CELL - limit:
+		return true
+	return false
+
+
+func _chair_on_table(at: Vector3, yaw: float, table: Vector3) -> bool:
+	var co := cos(yaw)
+	var si := sin(yaw)
+	var locals: Array[Vector3] = [
+		Vector3(0.0, 0.0, -0.15),
+		Vector3(0.0, 0.0, -0.45),
+		Vector3(-0.28, 0.0, -0.3),
+		Vector3(0.2, 0.0, -0.3),
+	]
+	var min_x := table.x - 0.62
+	var max_x := table.x + 1.48
+	var min_z := table.z - 0.58
+	var max_z := table.z + 0.68
+	for local in locals:
+		var world := at + Vector3(local.x * co + local.z * si, 0.0, -local.x * si + local.z * co)
+		if world.x > min_x and world.x < max_x and world.z > min_z and world.z < max_z:
+			return true
+	return false
+
+
+func _clear_of_chairs(at: Vector3, gap: float) -> bool:
+	for spot in _chair_spots:
+		if Vector2(at.x - spot.x, at.z - spot.z).length() < gap:
+			return false
+	return true
+
+
 func _chair(at: Vector3, yaw: float = 0.0) -> void:
 	_bk(BK_WOOD_CHAIR, _geometry, at, yaw)
 	return
@@ -1726,6 +1851,7 @@ func _chair(at: Vector3, yaw: float = 0.0) -> void:
 func _cubicle(at: Vector3, yaw: float = 0.0) -> void:
 	var node := _prop(CUBICLE, at)
 	node.rotation.y = yaw
+	_cubicle_spots.append({"x": at.x, "z": at.z, "yaw": yaw})
 	# Back, sides, and the desk block the walk. The front of the stall stays open.
 	for block in [
 		[Vector3(0.0, 0.7, 0.0), Vector3(1.9, 1.4, 0.1)],
@@ -1916,7 +2042,7 @@ func _skip_furnish(cell: Vector2i) -> bool:
 		return true
 	if cell.x >= 6 and cell.x <= 7 and cell.y >= 52 and cell.y <= 54:
 		return true
-	if cell == Vector2i(6, 22):
+	if cell == Vector2i(6, 22) or _is_restroom(cell):
 		return true
 	return false
 
@@ -2409,14 +2535,20 @@ func _scatter_corner_plants() -> void:
 	var step := maxi(1, int(spots.size() / 30.0))
 	var placed := 0
 	var index := 0
+	var used: Dictionary = {}
 	while placed < 30 and index < spots.size():
-		var at: Vector3 = spots[index]
-		var yaw := float(placed) * 0.9
-		if trees[index]:
-			_bk(BK_TREE, _geometry, at, yaw)
-		else:
-			_bk(BK_PLANT, _geometry, at, yaw)
-		placed += 1
+		var tree := trees[index]
+		var radius := 1.15 if tree else 0.45
+		var at := _clear_plant_spot(spots[index], radius)
+		var key := Vector2i(int(at.x * 2.0), int(at.z * 2.0))
+		if not used.has(key):
+			used[key] = true
+			var yaw := float(placed) * 0.9
+			if tree:
+				_bk(BK_TREE, _geometry, at, yaw)
+			else:
+				_bk(BK_PLANT, _geometry, at, yaw)
+			placed += 1
 		index += step
 
 
@@ -2429,9 +2561,82 @@ func _plant_room(cell: Vector2i) -> bool:
 		return false
 	if cell.x >= -6 and cell.x <= -5 and cell.y >= 24 and cell.y <= 26:
 		return false
-	if cell == Vector2i(6, 22) or cell == Vector2i(-1, 5):
+	if cell == Vector2i(6, 22) or cell == Vector2i(-1, 5) or _is_restroom(cell):
 		return false
 	return true
+
+
+func _plant_hits_cubicle(at: Vector3, radius: float) -> bool:
+	for spot in _cubicle_spots:
+		var yaw := float(spot["yaw"])
+		var dx := at.x - float(spot["x"])
+		var dz := at.z - float(spot["z"])
+		var co := cos(yaw)
+		var si := sin(yaw)
+		var lx := dx * co - dz * si
+		var lz := dx * si + dz * co
+		if lx >= -1.08 - radius and lx <= 1.08 + radius and lz >= -0.25 - radius and lz <= 1.75 + radius:
+			return true
+	return false
+
+
+func _clear_plant_spot(at: Vector3, radius: float) -> Vector3:
+	if not _plant_hits_cubicle(at, radius):
+		return at
+	var best := at
+	var best_d := 100000.0
+	var found := false
+	var origin := Vector2i(int(floor(at.x / CELL)), int(floor(at.z / CELL)))
+	for dz in range(-4, 5):
+		for dx in range(-4, 5):
+			var cell := origin + Vector2i(dx, dz)
+			if not _cell_set.has(cell):
+				continue
+			var inset := radius + 0.2
+			var corners: Array[Vector3] = [
+				Vector3(cell.x * CELL + inset, 0.0, cell.y * CELL + inset),
+				Vector3((cell.x + 1) * CELL - inset, 0.0, cell.y * CELL + inset),
+				Vector3(cell.x * CELL + inset, 0.0, (cell.y + 1) * CELL - inset),
+				Vector3((cell.x + 1) * CELL - inset, 0.0, (cell.y + 1) * CELL - inset),
+			]
+			for spot in corners:
+				if _plant_hits_cubicle(spot, radius):
+					continue
+				var dist := spot.distance_squared_to(at)
+				if dist < best_d:
+					best = spot
+					best_d = dist
+					found = true
+	for spot in _cubicle_spots:
+		var yaw := float(spot["yaw"])
+		var co := cos(yaw)
+		var si := sin(yaw)
+		var offsets: Array[Vector2] = [
+			Vector2(0.0, 1.9 + radius),
+			Vector2(1.35 + radius, 0.7),
+			Vector2(-(1.35 + radius), 0.7),
+		]
+		for off in offsets:
+			var wx := float(spot["x"]) + off.x * co + off.y * si
+			var wz := float(spot["z"]) - off.x * si + off.y * co
+			var candidate := Vector3(wx, 0.0, wz)
+			if not _point_in_cell(candidate, radius) or _plant_hits_cubicle(candidate, radius):
+				continue
+			var dist := candidate.distance_squared_to(at)
+			if dist < best_d:
+				best = candidate
+				best_d = dist
+				found = true
+	return best if found else at
+
+
+func _point_in_cell(at: Vector3, margin: float) -> bool:
+	var cell := Vector2i(int(floor(at.x / CELL)), int(floor(at.z / CELL)))
+	if not _cell_set.has(cell):
+		return false
+	var lx := at.x - float(cell.x) * CELL
+	var lz := at.z - float(cell.y) * CELL
+	return lx > margin and lx < CELL - margin and lz > margin and lz < CELL - margin
 
 
 func _corner_spot(cell: Vector2i, pair: String, gap: float) -> Vector3:
@@ -2447,8 +2652,8 @@ func _corner_spot(cell: Vector2i, pair: String, gap: float) -> Vector3:
 
 
 func _scatter_reference_props() -> void:
-	_potted_tree(Vector3(6.2, 0.0, 63.6))
-	_broadleaf_plant(Vector3(8.75, 0.0, 26.3))
+	_potted_tree(_clear_plant_spot(Vector3(6.2, 0.0, 63.6), 1.15))
+	_broadleaf_plant(_clear_plant_spot(Vector3(8.75, 0.0, 26.3), 0.45))
 	_metal_shelf(Vector3(-7.72, 0.0, 66.2), PI * 0.5)
 	_office_copier(Vector3(15.52, 0.0, 26.5), -PI * 0.5)
 	_filing_cabinet(Vector3(-15.62, 0.0, 67.4), PI * 0.5)
@@ -2495,6 +2700,7 @@ func _broadleaf_plant(at: Vector3) -> void:
 
 
 func _metal_shelf(at: Vector3, yaw: float) -> void:
+	_shelf_spots.append({"x": at.x, "z": at.z, "yaw": yaw})
 	var node := _bk(BK_SHELF, _geometry, at, yaw)
 	# Board tops are 0.614, 0.958 and 1.303. Two millimetres of sink keeps the stacks on the wood.
 	_bk(BK_BOOKS, node, Vector3(-0.28, 0.612, 0.0), 0.2)
@@ -2536,8 +2742,11 @@ func _office_copier(at: Vector3, yaw: float) -> void:
 
 
 func _scatter_cabinets() -> void:
-	var spots: Array[Vector3] = []
-	var yaws: Array[float] = []
+	# The reference shelf is placed later, on this same wall.
+	_shelf_spots.append({"x": -7.72, "z": 66.2, "yaw": PI * 0.5})
+	var cells: Array[Vector2i] = []
+	var edges: Array[String] = []
+	var prefers: Array[float] = []
 	var seen: Dictionary = {}
 	for cell in _cells:
 		if not _plant_room(cell):
@@ -2546,22 +2755,56 @@ func _scatter_cabinets() -> void:
 		if edge == "":
 			continue
 		var along := 2.15 if posmod(cell.x + cell.y, 2) == 0 else 1.55
-		var at := _on_wall(cell, edge, along) - _edge_dir(edge) * 0.37
+		var at := _on_wall(cell, edge, along)
 		var key := Vector2i(int(at.x * 2.0), int(at.z * 2.0))
 		if seen.has(key):
 			continue
 		seen[key] = true
-		spots.append(at)
-		yaws.append(_face_into_room(edge))
-	if spots.is_empty():
+		cells.append(cell)
+		edges.append(edge)
+		prefers.append(along)
+	if cells.is_empty():
 		return
-	var step := maxi(1, int(spots.size() / 20.0))
+	var step := maxi(1, int(cells.size() / 20.0))
 	var placed := 0
 	var index := 0
-	while placed < 20 and index < spots.size():
-		_filing_cabinet(spots[index], yaws[index])
-		placed += 1
-		index += step
+	while placed < 20 and index < cells.size():
+		var along := _clear_cabinet_along(cells[index], edges[index], prefers[index])
+		if along >= 0.0:
+			var spot := _on_wall(cells[index], edges[index], along) - _edge_dir(edges[index]) * 0.37
+			_filing_cabinet(spot, _face_into_room(edges[index]))
+			_cabinet_spots.append(spot)
+			placed += 1
+			index += step
+		else:
+			index += 1
+
+
+func _clear_cabinet_along(cell: Vector2i, edge: String, prefer: float) -> float:
+	var options: Array[float] = [prefer, 0.7, 3.3, 1.05, 2.95, 1.55, 2.45]
+	for along in options:
+		var at := _on_wall(cell, edge, along) - _edge_dir(edge) * 0.37
+		if not _cabinet_blocked(at):
+			return along
+	return -1.0
+
+
+func _cabinet_blocked(at: Vector3) -> bool:
+	for spot in _shelf_spots:
+		var yaw := float(spot["yaw"])
+		var dx := at.x - float(spot["x"])
+		var dz := at.z - float(spot["z"])
+		var co := cos(yaw)
+		var si := sin(yaw)
+		var lx := dx * co - dz * si
+		var lz := dx * si + dz * co
+		# Shelf is 1.16 m wide. Keep the cabinet body clear of the uprights.
+		if absf(lx) < 1.08 and absf(lz) < 0.85:
+			return true
+	for other in _cabinet_spots:
+		if at.distance_to(other) < 0.85:
+			return true
+	return false
 
 
 func _cabinet_wall(cell: Vector2i) -> String:
@@ -2658,14 +2901,37 @@ func _filing_cabinet(at: Vector3, yaw: float) -> void:
 
 
 func _conference_eight(at: Vector3) -> void:
-	_conference_table(at)
-	# Chair bodies are 0.53 m wide, so the centres stay 0.78 m apart.
-	var slots: Array[float] = [-0.78, 0.0, 0.78]
+	var cell := Vector2i(int(floor(at.x / CELL)), int(floor(at.z / CELL)))
+	var spot := at
+	var open_x := false
+	var open_z := false
+	# The table sits in a corner. Slide it into the open floor so the chairs fit beside it.
+	if _is_solid_edge(_kind_on(cell, "e")) and _kind_on(cell, "w") == "none":
+		spot.x -= 1.15
+		open_x = true
+	elif _is_solid_edge(_kind_on(cell, "w")) and _kind_on(cell, "e") == "none":
+		spot.x += 1.15
+		open_x = true
+	elif _kind_on(cell, "e") == "none" or _kind_on(cell, "w") == "none":
+		open_x = true
+	if _is_solid_edge(_kind_on(cell, "n")) and _kind_on(cell, "s") == "none":
+		spot.z -= 0.45
+		open_z = true
+	elif _is_solid_edge(_kind_on(cell, "s")) and _kind_on(cell, "n") == "none":
+		spot.z += 0.45
+		open_z = true
+	elif _kind_on(cell, "n") == "none" or _kind_on(cell, "s") == "none":
+		open_z = true
+	_conference_table(spot)
+	var along := 1.15 if open_x else 0.85
+	var side_clear := 0.62 if open_z else 0.34
+	var end_clear := 0.55 if open_x else 0.34
+	var slots: Array[float] = [-along, 0.0, along]
 	for i in slots.size():
-		_seat(at, "n", slots[i], "swivel")
-		_seat(at, "s", slots[i], "swivel")
-	_seat(at, "e", 0.0, "swivel")
-	_seat(at, "w", 0.0, "swivel")
+		_seat(spot, "n", slots[i], "swivel", side_clear)
+		_seat(spot, "s", slots[i], "swivel", side_clear)
+	_seat(spot, "e", 0.0, "swivel", end_clear)
+	_seat(spot, "w", 0.0, "swivel", end_clear)
 
 
 func _small_conference(at: Vector3) -> void:
@@ -2815,6 +3081,255 @@ func _spot(at: Vector3, angles: Vector3, energy: float, color: Color, shadows: b
 	spot.spot_angle = 32.0
 	spot.shadow_enabled = shadows
 	_geometry.add_child(spot)
+
+
+func _build_restrooms() -> void:
+	# White square sheet from Blendkit: ten tiles across. Walls use the medium
+	# size, floors the large size.
+	var wall_ns := _square_tile_material(0.20, CELL, 3.2)
+	var wall_ew := _square_tile_material(0.20, 3.2, CELL)
+	var floor_tile := _square_tile_material(0.40, 3.78, 3.78)
+	var bands: Array[int] = [20, 44]
+	for band in bands:
+		_dress_restroom(2, 3, band, band + 1, wall_ns, wall_ew, floor_tile)
+		_dress_restroom(2, 3, band + 2, band + 3, wall_ns, wall_ew, floor_tile)
+		var x0 := 8.0
+		var x1 := 16.0
+		var south0 := float(band) * CELL
+		var south1 := float(band + 2) * CELL
+		var north1 := float(band + 4) * CELL
+		# South room opens west, off the central corridor. Toilets line the far wall,
+		# clear of the sinks on the south wall.
+		_toilet_bank("e", x0, x1, south0, south1, "s")
+		_sink_bank("s", x0, x1, south0, south1)
+		_wc_sign(Vector2i(1, band + 1), "e", "WC Gentlemen")
+		# North room opens east. Toilets stay clear of the sinks on the north wall.
+		_toilet_bank("w", x0, x1, south1, north1, "n")
+		_sink_bank("n", x0, x1, south1, north1)
+		_wc_sign(Vector2i(3, band + 3), "e", "WC Ladies")
+
+
+func _dress_restroom(x0: int, x1: int, z0: int, z1: int, wall_ns: Material, wall_ew: Material, floor_tile: Material) -> void:
+	for z in range(z0, z1 + 1):
+		for x in range(x0, x1 + 1):
+			var cell := Vector2i(x, z)
+			_tile_floor(cell, floor_tile)
+			for edge in EDGES:
+				var kind := _kind_on(cell, edge)
+				if kind != "wall" and kind != "window":
+					continue
+				var mat := wall_ew if edge == "e" or edge == "w" else wall_ns
+				_tile_wall(cell, edge, mat)
+
+
+func _tile_floor(cell: Vector2i, material: Material) -> void:
+	var mesh_node := MeshInstance3D.new()
+	mesh_node.name = "TileFloor"
+	var plane := PlaneMesh.new()
+	plane.size = Vector2(3.78, 3.78)
+	mesh_node.mesh = plane
+	mesh_node.position = Vector3(cell.x * CELL + 2.0, 0.02, cell.y * CELL + 2.0)
+	mesh_node.material_override = material
+	_geometry.add_child(mesh_node)
+
+
+func _tile_wall(cell: Vector2i, edge: String, material: Material) -> void:
+	var face := _on_wall(cell, edge, 2.0) - _edge_dir(edge) * 0.012
+	var mesh_node := MeshInstance3D.new()
+	mesh_node.name = "TileWall"
+	var plane := PlaneMesh.new()
+	# North and south walls run along X. East and west walls stand by rolling
+	# the plane onto its side, so the long axis has to start on local Z.
+	if edge == "e" or edge == "w":
+		plane.size = Vector2(3.2, CELL)
+		mesh_node.rotation.z = PI * 0.5
+	else:
+		plane.size = Vector2(CELL, 3.2)
+		mesh_node.rotation.x = -PI * 0.5
+	mesh_node.mesh = plane
+	mesh_node.position = Vector3(face.x, 1.6, face.z)
+	mesh_node.material_override = material
+	_geometry.add_child(mesh_node)
+
+
+func _square_tile_material(tile: float, span_u: float, span_v: float) -> StandardMaterial3D:
+	var mat := StandardMaterial3D.new()
+	mat.albedo_texture = TILE_TEX
+	mat.albedo_color = Color(1.0, 1.0, 1.0)
+	mat.roughness = 0.34
+	mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	mat.uv1_scale = Vector3(span_u / tile / 10.0, span_v / tile / 10.0, 1.0)
+	return mat
+
+
+func _toilet_bank(edge: String, x0: float, x1: float, z0: float, z1: float, sink_end: String) -> void:
+	# The bowl sits near the floor in the source model. A uniform scale lifts the seat
+	# without stretching it. Back and front are the scaled local Z extents.
+	var scale := 1.48
+	var back := 0.250 * scale
+	var front := 0.369 * scale
+	var wall_clear := 0.06
+	var origin_gap := back + wall_clear
+	var front_gap := origin_gap + front
+	# Closed door stays this far in front of the bowl, so the leaf does not touch it.
+	var door_gap := 0.42
+	var door_from_wall := front_gap + door_gap
+	var stall_depth := door_from_wall + 0.08
+	var white := _mat(Color(0.95, 0.95, 0.94), 0.4)
+	var low_pad := 0.96 if sink_end == "s" or sink_end == "w" else 0.24
+	var high_pad := 0.96 if sink_end == "n" or sink_end == "e" else 0.24
+	var run0 := z0 + low_pad
+	var run1 := z1 - high_pad
+	if edge == "n" or edge == "s":
+		run0 = x0 + low_pad
+		run1 = x1 - high_pad
+	var count := 5
+	var pitch := (run1 - run0) / float(count)
+	var yaw := _face_into_room(edge)
+	for i in count:
+		var along := run0 + (float(i) + 0.5) * pitch
+		var at := _against(edge, x0, x1, z0, z1, along, origin_gap)
+		var toilet := _bk(BK_TOILET, _geometry, at, yaw)
+		toilet.scale = Vector3(scale, scale, scale)
+		_stall_front(edge, x0, x1, z0, z1, along, pitch, door_from_wall, white)
+	for i in count + 1:
+		var along := run0 + float(i) * pitch
+		var mid := _against(edge, x0, x1, z0, z1, along, wall_clear + stall_depth * 0.5)
+		var size := Vector3(stall_depth, 1.92, 0.04)
+		if edge == "n" or edge == "s":
+			size = Vector3(0.04, 1.92, stall_depth)
+		_solid("Stall", Vector3(mid.x, 1.06, mid.z), size, white)
+
+
+func _stall_front(edge: String, x0: float, x1: float, z0: float, z1: float, along: float, pitch: float, door_from_wall: float, white: Material) -> void:
+	var opening := pitch - 0.04
+	var door_width := minf(0.78, opening - 0.16)
+	var side := (opening - door_width) * 0.5
+	var bay0 := along - pitch * 0.5 + 0.02
+	# Local +X is the leaf. On a west or north wall that axis runs back along the row.
+	var hinge_along := bay0 + side
+	if edge == "w" or edge == "n":
+		hinge_along = bay0 + side + door_width
+	var hinge := _against(edge, x0, x1, z0, z1, hinge_along, door_from_wall)
+	_stall_door(hinge, _face_into_room(edge), door_width, white)
+	_stall_fill(edge, x0, x1, z0, z1, bay0 + side * 0.5, side - 0.02, door_from_wall, white)
+	var far := bay0 + side + door_width
+	_stall_fill(edge, x0, x1, z0, z1, far + side * 0.5, side - 0.02, door_from_wall, white)
+
+
+func _stall_fill(edge: String, x0: float, x1: float, z0: float, z1: float, along: float, width: float, door_from_wall: float, white: Material) -> void:
+	if width < 0.04:
+		return
+	var at := _against(edge, x0, x1, z0, z1, along, door_from_wall)
+	var size := Vector3(0.04, 1.80, width)
+	if edge == "n" or edge == "s":
+		size = Vector3(width, 1.80, 0.04)
+	_solid("StallFill", Vector3(at.x, 1.02, at.z), size, white)
+
+
+func _stall_door(at: Vector3, yaw: float, width: float, white: Material) -> void:
+	var handle := _mat(Color(0.74, 0.75, 0.78), 0.28, 0.88)
+	var body := AnimatableBody3D.new()
+	body.name = "StallDoor"
+	body.position = at
+	body.rotation.y = yaw
+	body.sync_to_physics = true
+	body.set_script(DOOR_SCRIPT)
+	# Negative swing opens into the room, away from the bowl.
+	body.set("open_angle_degrees", -85.0)
+	body.set("duration", 0.4)
+	var height := 1.80
+	var thick := 0.04
+	var mesh_node := MeshInstance3D.new()
+	var box := BoxMesh.new()
+	box.size = Vector3(width, height, thick)
+	mesh_node.mesh = box
+	mesh_node.position = Vector3(width * 0.5, 0.12 + height * 0.5, 0.0)
+	mesh_node.material_override = white
+	body.add_child(mesh_node)
+	var shape := CollisionShape3D.new()
+	var collision := BoxShape3D.new()
+	collision.size = box.size
+	shape.shape = collision
+	shape.position = mesh_node.position
+	body.add_child(shape)
+	_bit(body, Vector3(width - 0.09, 0.98, thick * 0.5 + 0.012), Vector3(0.11, 0.028, 0.018), handle)
+	_geometry.add_child(body)
+
+
+func _wc_sign(cell: Vector2i, edge: String, text: String) -> void:
+	# Beside the leaf, on the corridor face, so the letters read before you enter.
+	var room := cell + _delta(edge)
+	var along := 0.66
+	var face: Vector3
+	var yaw: float
+	if _is_restroom(room):
+		face = _on_wall(cell, edge, along) - _edge_dir(edge) * 0.02
+		yaw = _face_into_room(edge)
+	else:
+		var corridor_edge := _opposite(edge)
+		face = _on_wall(room, corridor_edge, along) - _edge_dir(corridor_edge) * 0.02
+		yaw = _face_into_room(corridor_edge)
+	var plate := _mat(Color(0.22, 0.23, 0.25), 0.4, 0.55)
+	var letters := _mat(Color(0.84, 0.86, 0.88), 0.22, 0.86)
+	var root := Node3D.new()
+	root.name = "WcSign"
+	root.position = Vector3(face.x, 1.55, face.z)
+	root.rotation.y = yaw
+	_geometry.add_child(root)
+	_bit(root, Vector3(0.0, 0.0, 0.006), Vector3(0.96, 0.28, 0.012), plate)
+	var mesh_node := MeshInstance3D.new()
+	var text_mesh := TextMesh.new()
+	text_mesh.text = text
+	text_mesh.font_size = 40
+	text_mesh.pixel_size = 0.0026
+	text_mesh.depth = 0.008
+	text_mesh.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	text_mesh.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	mesh_node.mesh = text_mesh
+	mesh_node.position = Vector3(0.0, 0.0, 0.016)
+	mesh_node.material_override = letters
+	root.add_child(mesh_node)
+
+
+func _sink_bank(edge: String, x0: float, x1: float, z0: float, z1: float) -> void:
+	var run0 := z0 + 1.15
+	var run1 := z1 - 1.15
+	if edge == "n" or edge == "s":
+		run0 = x0 + 1.15
+		run1 = x1 - 1.15
+	var count := 3
+	var pitch := (run1 - run0) / float(count)
+	for i in count:
+		var along := run0 + (float(i) + 0.5) * pitch
+		var at := _against(edge, x0, x1, z0, z1, along, 0.30)
+		_bk(BK_SINK, _geometry, at, _face_into_room(edge))
+		var face := _against(edge, x0, x1, z0, z1, along, 0.0)
+		var mirror := _wall_hang(BK_MIRROR, face, _face_into_room(edge), 1.62, 1.6)
+		_paint_black_glass(mirror)
+
+
+func _against(edge: String, x0: float, x1: float, z0: float, z1: float, along: float, gap: float) -> Vector3:
+	match edge:
+		"e":
+			return Vector3(x1 - 0.10 - gap, 0.0, along)
+		"w":
+			return Vector3(x0 + 0.10 + gap, 0.0, along)
+		"s":
+			return Vector3(along, 0.0, z0 + 0.10 + gap)
+		_:
+			return Vector3(along, 0.0, z1 - 0.10 - gap)
+
+
+func _paint_black_glass(root: Node3D) -> void:
+	var glass := _mat(Color(0.012, 0.012, 0.014), 0.07, 0.62)
+	var pending: Array[Node] = [root]
+	while not pending.is_empty():
+		var node: Node = pending.pop_back()
+		if node is MeshInstance3D:
+			(node as MeshInstance3D).material_override = glass
+		for child in node.get_children():
+			pending.append(child)
 
 
 func _mat(
