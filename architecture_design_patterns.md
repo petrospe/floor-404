@@ -1,6 +1,6 @@
 # Floor 404 — Architecture & Design Patterns
 
-> **Status:** Target implementation architecture for Godot 4 / GDScript. Existing Level 4 gameplay must remain playable during migration. This document describes **what to build**, not what is already verified as implemented.
+> **Status:** Target implementation architecture for Godot 4 / GDScript. Existing Level 4 gameplay must remain playable during migration. This document describes **what to build**, not what is already verified as implemented. All visual assets and scene transformations must comply with the mandatory Visual Orientation and Mirroring Rules defined in AGENTS.md.
 
 ## 1. Principles
 
