@@ -106,6 +106,10 @@ func force_open() -> void:
 	_set_open(true)
 
 
+func close_doors() -> void:
+	_set_open(false)
+
+
 func set_car_bounds(center: Vector3) -> void:
 	_car_min = Vector2(center.x - 2.1, center.z - 2.1)
 	_car_max = Vector2(center.x + 2.1, center.z + 2.1)

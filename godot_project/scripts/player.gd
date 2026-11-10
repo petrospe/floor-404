@@ -51,6 +51,7 @@ var _use_move_actions: bool = false
 var _use_interact_action: bool = false
 var _gravity: float = 9.8
 var _respawning: bool = false
+var _input_suspended: bool = false
 var _last_safe_camera_pitch: float = 0.0
 
 const _SURFACE_GROUPS: Array[StringName] = [
@@ -92,6 +93,15 @@ func travel_to(target: Transform3D) -> void:
 	reset_physics_interpolation()
 
 
+func set_input_suspended(suspended: bool) -> void:
+	_input_suspended = suspended
+	if suspended:
+		_halt_motion()
+		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	else:
+		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+
+
 ## Freeze, fade out, place the body on last_safe_transform, then fade in.
 func respawn(fade_out_seconds: float = 0.1, fade_in_seconds: float = 0.15) -> void:
 	if _respawning:
@@ -119,7 +129,7 @@ func respawn(fade_out_seconds: float = 0.1, fade_in_seconds: float = 0.15) -> vo
 
 
 func _unhandled_input(event: InputEvent) -> void:
-	if _respawning:
+	if _respawning or _input_suspended:
 		return
 	if event is InputEventMouseMotion and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
 		_look(event as InputEventMouseMotion)
@@ -138,7 +148,7 @@ func _unhandled_input(event: InputEvent) -> void:
 
 
 func _physics_process(delta: float) -> void:
-	if _respawning:
+	if _respawning or _input_suspended:
 		_halt_motion()
 		return
 

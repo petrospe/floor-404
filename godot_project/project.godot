@@ -11,9 +11,16 @@ config_version=5
 [application]
 
 config/name="Floor 404"
-run/main_scene="res://scenes/office_level.tscn"
+run/main_scene="res://scenes/title.tscn"
 config/features=PackedStringArray("4.7", "Forward Plus")
 config/icon="res://icon.svg"
+
+[autoload]
+
+FloorRegistry="*res://scripts/floor_registry.gd"
+GameState="*res://scripts/game_state.gd"
+SaveManager="*res://scripts/save_manager.gd"
+FloorTransition="*res://scripts/floor_transition.gd"
 
 [display]
 

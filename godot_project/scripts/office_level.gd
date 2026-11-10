@@ -54,6 +54,7 @@ const TILE_TEX := preload("res://models/blendkit/white_tiles.jpg")
 const ALARM_BEACON := preload("res://scripts/alarm_beacon.gd")
 const ELEVATOR_DOORS := preload("res://scripts/elevator_doors.gd")
 const ELEVATOR_PANEL := preload("res://scripts/elevator_panel.gd")
+const FLOOR_PANEL := preload("res://scripts/electrical_panel.gd")
 const FLOOR_EXIT := preload("res://scripts/floor_exit.gd")
 const DOOR_SCRIPT := preload("res://scripts/door.gd")
 const OVERLAP := preload("res://scripts/overlap_resolver.gd")
@@ -100,6 +101,7 @@ func _ready() -> void:
 	_build_shell()
 	_build_lights()
 	_build_props()
+	_progression_hooks()
 
 
 func _process(_delta: float) -> void:
@@ -1073,8 +1075,8 @@ func _build_elevators() -> void:
 	var marker_b := _elevator_marker("RideB", Vector3(-22.5, 0.05, 202.0), -PI * 0.5)
 	_dress_car(Vector3(26.0, 0.0, 10.0), true)
 	_dress_car(Vector3(-22.0, 0.0, 202.0), false)
-	var panel_a = _elevator_panel(Vector3(27.67, 1.25, 10.35), -1.0, 4)
-	var panel_b = _elevator_panel(Vector3(-23.67, 1.25, 202.35), 1.0, 5)
+	var panel_a = _elevator_panel(Vector3(27.67, 1.25, 10.35), -1.0, 3, "F04_DOWN")
+	var panel_b = _elevator_panel(Vector3(-23.67, 1.25, 202.35), 1.0, 5, "F04_UP")
 	panel_a.partner_marker = marker_b
 	panel_a.partner_doors = second
 	panel_a.home_doors = first
@@ -1092,12 +1094,12 @@ func _elevator_marker(label: String, at: Vector3, yaw: float) -> Node3D:
 	return marker
 
 
-func _elevator_panel(at: Vector3, face: float, lit_floor: int):
+func _elevator_panel(at: Vector3, face: float, lit_floor: int, elevator_id: String = ""):
 	var panel = ELEVATOR_PANEL.new()
 	panel.position = at
 	var steel := _mat(Color(0.62, 0.63, 0.66), 0.35, 0.7)
 	var button := _mat(Color(0.16, 0.16, 0.17), 0.4, 0.35)
-	var lit := _mat(Color(0.15, 0.45, 0.28), 0.35, 0.1, Color(0.2, 0.85, 0.45), 1.8)
+	var lit := _mat(Color(0.35, 0.06, 0.05), 0.35, 0.1, Color(0.85, 0.08, 0.05), 1.4)
 	_part(panel, Vector3(0.0, 0.0, 0.0), Vector3(0.04, 0.58, 0.26), steel)
 	var shape := CollisionShape3D.new()
 	var collision := BoxShape3D.new()
@@ -1116,11 +1118,40 @@ func _elevator_panel(at: Vector3, face: float, lit_floor: int):
 		label.rotation.y = face * PI * 0.5
 		label.pixel_size = 0.0012
 		label.font_size = 28
-		label.modulate = Color(0.92, 0.93, 0.9) if floor_number != lit_floor else Color(0.7, 1.0, 0.8)
+		label.modulate = Color(0.92, 0.93, 0.9)
 		label.outline_size = 0
 		panel.add_child(label)
 	_geometry.add_child(panel)
+	if elevator_id != "":
+		panel.configure(elevator_id, lit)
 	return panel
+
+
+func _progression_hooks() -> void:
+	_spawn_marker("ContinueSpawn", Vector3(2.0, 0.05, 2.0), PI)
+	_spawn_marker("FromF03", Vector3(21.2, 0.05, 10.0), PI * 0.5)
+	_spawn_marker("FromF05", Vector3(-18.2, 0.05, 202.0), -PI * 0.5)
+	# In front of the existing wall cabinets, readable from inside the closet.
+	_floor_panel("F04_DOWN_PANEL", Vector3(-0.45, 1.35, 22.45), PI * 0.5, false)
+	_floor_panel("F04_UP_PANEL", Vector3(25.9, 1.35, 91.55), 0.0, false)
+	FloorTransition.apply_pending_spawn(self)
+
+
+func _spawn_marker(marker_name: String, at: Vector3, yaw: float) -> void:
+	var marker := Node3D.new()
+	marker.name = marker_name
+	marker.position = at
+	marker.rotation.y = yaw
+	_geometry.add_child(marker)
+
+
+func _floor_panel(panel_id: String, at: Vector3, yaw: float, plate: bool) -> void:
+	var panel := FLOOR_PANEL.new()
+	panel.panel_id = panel_id
+	panel.show_plate = plate
+	panel.position = at
+	panel.rotation.y = yaw
+	_geometry.add_child(panel)
 
 
 func _dress_car(center: Vector3, door_on_west: bool) -> void:
