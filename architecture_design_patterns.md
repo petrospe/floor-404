@@ -1,7 +1,7 @@
 # Floor 404
 ## The Null Pointer
 
-Πρώτο πρόσωπο liminal walking simulator σε εγκαταλελειμμένο εταιρικό όροφο. Ο σχεδιασμός για το **Level 4 (Abandoned Office / Corporate Complex)** είναι εμπνευσμένος από το *Escape the Backrooms* και το *POOLS*. Η απουσία τεράτων εστιάζει όλη την εμπειρία στην **ατμόσφαιρα**, τη **γεωμετρία**, τον **ήχο** και την **αίσθηση απομόνωσης**.
+Πρώτο πρόσωπο liminal walking simulator σε εγκαταλελειμμένο εταιρικό όροφο. Ο σχεδιασμός για το **Level 4 (Abandoned Office / Corporate Complex)** είναι εμπνευσμένος από το *Escape the Backrooms*, *Dreamcore* και το *POOLS*. Η απουσία τεράτων εστιάζει όλη την εμπειρία στην **ατμόσφαιρα**, τη **γεωμετρία**, τον **ήχο** και την **αίσθηση απομόνωσης**.
 
 **Επίσημος τίτλος:** Floor 404  
 **Υπότιτλος:** The Null Pointer
@@ -17,17 +17,15 @@
 * **Δομή:** Ατελείωτοι διάδρομοι, αίθουσες συνεδριάσεων (meeting rooms), server rooms, cubicles, κουζίνες, τουαλέτες, αποθήκες, κλιμακοστάσια και ανελκυστήρες.
 * **Παράθυρα & Εξωτερικό Περιβάλλον:** Τα παράθυρα βλέπουν στο απόλυτο σκοτάδι. Έξω ακούγεται καταρρακτώδης βροχή και αστραπές/κεραυνοί (οι κεραυνοί φωτίζουν στιγμιαία τα δωμάτια με παράθυρα). Δεν υπάρχει εξωτερικός κόσμος.
 * **Κακόβουλοι Κίνδυνοι (Hazards without Monsters):**
-* **Ηλεκτροπληξία:** Εκτεθειμένα καλώδια σε νερά ή κατεστραμμένους πίνακες.
-* **Πτώση στο Κενό:** Ασανσέρ που λείπουν, τρύπες στο πάτωμα που οδηγούν στο κενό.
+* **Ηλεκτροπληξία:** Εκτεθειμένα καλώδια σε νερά ή κατεστραμμένους πίνακες - Not implement.
+* **Πτώση στο Κενό:** Ασανσέρ που λείπουν, τρύπες στο πάτωμα που οδηγούν στο κενό - Not implement.
 
 
 * **Instant Checkpoint System (Στυλ *POOLS*):** Όταν ο παίκτης πεθαίνει, η οθόνη μαυρίζει στιγμιαία (0.2 sec fade) και ο παίκτης γίνεται **instant respawn** στο τελευταίο ασφαλές σημείο/δωμάτιο (Checkpoint Zone) που πάτησε, διατηρώντας το immersion χωρίς loading screens.
 
 ### 2. Σύστημα Ασανσέρ (Vertical Navigation)
 
-* Δεκάδες ανελκυστήρες διασκορπισμένοι.
-* Τα κουμπιά δεν έχουν αριθμούς ορόφων (ή έχουν σβησμένους/παράξενους αριθμούς).
-* Όταν μπαίνεις στο ασανσέρ και κλείνουν οι πόρτες, παίζει ήχος κίνησης και όταν ανοίγουν, βρίσκεται σε ένα εντελώς διαφορετικό τμήμα του κτιρίου (seamless level transition / teleportation).
+* Δεκάδες ανελκυστήρες διασκορπισμένοι σε πολλους ορόφους. Δυο ασανσερ ανα όροφο και 2 ηλεκτρολόγικοι πίνακες ανά όροφο, που πρεπει να επισκευαστούν - να λυθει ένας γρίφος - για να λειτουργουν τα εσωτερικά κουμπια που σε πηγαινουν σε άλλον όροφο.
 
 ### 3. Interaction & Audio System
 
@@ -94,12 +92,11 @@ Coding Guidelines:
 #### 🤖 PROMPT 2: Instant Respawn / Checkpoint Hazard System
 
 > **Prompt:**
-> "Create a Hazard and Checkpoint System for Godot 4 (*POOLS* style instant respawn).
+> "Create a Checkpoint System for Godot 4 (*POOLS* style instant respawn).
 > Requirements:
 > 1. A `CheckpointZone.gd` (`Area3D`) script that updates the Player's `last_safe_position` when entered.
-> 2. A `HazardZone.gd` (`Area3D`) script (for void drops, electricity, lethal hazards).
-> 3. When the Player touches a `HazardZone`, trigger a quick black fade overlay (CanvasLayer), immediately reset the Player position/rotation to `last_safe_position`, and fade back in within 0.2 seconds.
-> Write the scripts for `HazardZone.gd`, `CheckpointZone.gd`, and the required code integration for `player.gd`."
+>
+> Write the script for`CheckpointZone.gd`, and the required code integration for `player.gd`."
 > 
 > 
 
@@ -122,10 +119,8 @@ Coding Guidelines:
 > **Prompt:**
 > "Create an Elevator System in Godot 4 for moving vertically between maze sections.
 > Requirements:
-> 1. An Elevator room with interactive door and floor buttons (no floor numbers).
-> 2. When the player enters, closes the door, and presses a button, play an elevator movement audio loop for a configurable duration (e.g. 3-5 seconds).
-> 3. During the movement, seamlessly teleport the elevator (or the player) to a different target Marker3D/Elevator location in the level.
-> 4. Open the doors to reveal the new maze area."
+> 1. An Elevator room with interactive door and floor buttons..
+> 2. Open the doors to reveal the new maze area."
 > 
 > 
 
