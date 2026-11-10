@@ -1,127 +1,145 @@
-# Floor 404
-## The Null Pointer
+# Floor 404 — Architecture & Design Patterns
 
-Πρώτο πρόσωπο liminal walking simulator σε εγκαταλελειμμένο εταιρικό όροφο. Ο σχεδιασμός για το **Level 4 (Abandoned Office / Corporate Complex)** είναι εμπνευσμένος από το *Escape the Backrooms*, *Dreamcore* και το *POOLS*. Η απουσία τεράτων εστιάζει όλη την εμπειρία στην **ατμόσφαιρα**, τη **γεωμετρία**, τον **ήχο** και την **αίσθηση απομόνωσης**.
+> **Status:** Target implementation architecture for Godot 4 / GDScript. Existing Level 4 gameplay must remain playable during migration. This document describes **what to build**, not what is already verified as implemented.
 
-**Επίσημος τίτλος:** Floor 404  
-**Υπότιτλος:** The Null Pointer
+## 1. Principles
 
-Ακολουθούν οι **Αρχικές Οδηγίες Αρχιτεκτονικής & Σχεδιασμού** καθώς και τα **Prompts/Rules** που θα περάσεις στο **Cursor AI**.
+- First-person liminal walking simulator. No monsters, combat, weapons, persistent HUD, or visible player mesh.
+- Godot 4 syntax (`CharacterBody3D`, `Node3D`, `Area3D`, `@export`, `@onready`), modular scenes, signals for decoupling, typed GDScript where practical.
+- Respect the 4×4 m structural grid and 3 m standard wall height defined in `level_design_logic.md`.
+- Never silently alter existing `office_level.tscn`, `office_level.gd`, player movement, doors, checkpoints, or imported Blender asset origins while adding the new progression system.
 
----
+## 2. Source of truth
 
-# Α' Μέρος: Αρχιτεκτονική & Αρχές Σχεδιασμού (Design Document)
+| Topic | Authoritative document |
+|---|---|
+| Player progression, panel rules, save semantics, ending | `gameplay_progression.md` |
+| Floor content, elevator counts, modular kit, atmosphere | `level_design_logic.md` |
+| Godot architecture, scene transitions, data contracts | This document |
+| Installation, current project files and run instructions | `README.md` |
 
-### 1. Αρχιτεκτονικό Στυλ & Ατμόσφαιρα (Level 4 - Corporate Office)
+If existing prototype code contradicts a target gameplay rule, label it **LEGACY PROTOTYPE** and migrate it; do not rewrite the design to match the prototype.
 
-* **Δομή:** Ατελείωτοι διάδρομοι, αίθουσες συνεδριάσεων (meeting rooms), server rooms, cubicles, κουζίνες, τουαλέτες, αποθήκες, κλιμακοστάσια και ανελκυστήρες.
-* **Παράθυρα & Εξωτερικό Περιβάλλον:** Τα παράθυρα βλέπουν στο απόλυτο σκοτάδι. Έξω ακούγεται καταρρακτώδης βροχή και αστραπές/κεραυνοί (οι κεραυνοί φωτίζουν στιγμιαία τα δωμάτια με παράθυρα). Δεν υπάρχει εξωτερικός κόσμος.
-* **Κακόβουλοι Κίνδυνοι (Hazards without Monsters):**
-* **Ηλεκτροπληξία:** Εκτεθειμένα καλώδια σε νερά ή κατεστραμμένους πίνακες - Not implement.
-* **Πτώση στο Κενό:** Ασανσέρ που λείπουν, τρύπες στο πάτωμα που οδηγούν στο κενό - Not implement.
-
-
-* **Instant Checkpoint System (Στυλ *POOLS*):** Όταν ο παίκτης πεθαίνει, η οθόνη μαυρίζει στιγμιαία (0.2 sec fade) και ο παίκτης γίνεται **instant respawn** στο τελευταίο ασφαλές σημείο/δωμάτιο (Checkpoint Zone) που πάτησε, διατηρώντας το immersion χωρίς loading screens.
-
-### 2. Σύστημα Ασανσέρ (Vertical Navigation)
-
-* Δεκάδες ανελκυστήρες διασκορπισμένοι σε πολλους ορόφους. Δυο ασανσερ ανα όροφο και 2 ηλεκτρολόγικοι πίνακες ανά όροφο, που πρεπει να επισκευαστούν - να λυθει ένας γρίφος - για να λειτουργουν τα εσωτερικά κουμπια που σε πηγαινουν σε άλλον όροφο.
-
-### 3. Interaction & Audio System
-
-* **Interaction (E key):** Άνοιγμα/κλείσιμο θυρών, διακοπτών φωτός, παραθύρων, κουμπιών ασανσέρ.
-* **Dynamic Audio:**
-* **Ambient:** Βόμβος φθορίου (Fluorescent hum), κλιματιστικά (HVAC noise), βροχή στα παράθυρα, μακρινές αστραπές.
-* **Footsteps:** Διαφορετικοί ήχοι ανάλογα με την επιφάνεια (μοκέτα, πλακάκι, μάρμαρο, εκτεθειμένο τσιμέντο, νερό).
-
-
-
----
-
-# Β' Μέρος: Οδηγίες για το Cursor AI
-
-Για να καταλάβει το Cursor AI ακριβώς τι θέλεις να φτιάξει στη Godot 4, χωρίζουμε τις οδηγίες σε **System Rules** (`.cursorrules`) και **Specific Feature Prompts**.
-
----
-
-### 1. Αρχείο `.cursorrules` (System Context)
-
-Δημιούργησε ένα αρχείο με όνομα `.cursorrules` στην ρίζα του Workspace σου στο Cursor και επικόλλησε το παρακάτω:
+## 3. Recommended scene/services layout (planned; confirm paths before creating)
 
 ```text
-# GODOT 4 GAME DEVELOPMENT RULES (FLOOR 404)
-
-Project Context:
-- Title: Floor 404 — The Null Pointer
-- Engine: Godot 4.x (GDScript)
-- Game Type: First-Person Liminal Space Walking Simulator (Backrooms Level 4 style)
-- Target Aesthetics: Atmospheric, abandoned corporate office, dark windows with thunder/rain outside.
-- Core Mechanics: WASD movement, Smooth Mouse Look, Interaction with doors/switches (E key), Instant Respawn Hazards, Elevator Teleports.
-- NO Monsters, NO HUD, NO Weapons, NO Visible Player Mesh.
-
-Coding Guidelines:
-1. Use strict Godot 4 syntax (@export, @onready, CharacterBody3D, Node3D, Area3D, RayCast3D). Do NOT use Godot 3 syntax.
-2. Code must be modular, well-commented, and optimized for performance.
-3. Keep scripts clean and readable. Use Signals for decoupling events (e.g. player_died, interact_triggered).
-
+godot_project/
+  project.godot
+  scenes/
+    office_level.tscn           # Existing playable Floor 4 prototype
+    player.tscn
+    ground_floor_ending.tscn   # Planned
+    floors/                    # Planned separate scenes for other floors
+    modular/                   # Existing 4 m kit
+    ui/electrical_panel_ui.tscn # Planned
+  scripts/
+    player.gd                  # Existing
+    office_level.gd            # Existing
+    elevator_panel.gd          # Existing legacy prototype: migrate
+    elevator_doors.gd          # Existing
+    checkpoint_zone.gd         # Existing
+    hazard_zone.gd             # Existing
+    game_state.gd              # Planned Autoload
+    save_manager.gd            # Planned persistence service
+    floor_registry.gd          # Planned floor/elevator route data
+    floor_transition.gd        # Planned safe scene transfer
+    electrical_panel.gd        # Planned puzzle controller
 ```
 
----
+Paths are **recommendations** except where noted as existing. Inspect the actual repository and preserve its naming and resource paths before coding.
 
-### 2. Prompts για Παραγωγή Κώδικα στο Cursor AI
+## 4. State ownership
 
-Μπορείς να δίνεις στο Cursor AI τα παρακάτω prompts **ένα-ένα** για να σου δημιουργεί τα αντίστοιχα GDScript αρχεία:
+### `GameState` (Autoload)
 
-#### 🤖 PROMPT 1: First-Person Controller + Interaction System
+Owns in-memory authoritative progression: `completed_panels`, `activated_elevators`, `last_activation_floor`, `last_activation_panel`, `game_completed`. All state changes go through methods (e.g., `complete_panel(panel_id)`), not through UI nodes modifying dictionaries directly. Emits `panel_completed(panel_id)` and `elevator_activated(elevator_id)` signals.
 
-> **Prompt:**
-> "Create a complete First-Person Controller script (`player.gd`) for Godot 4 (`CharacterBody3D`).
-> Features required:
-> 1. Classic WASD movement with smooth acceleration and friction.
-> 2. Smooth mouse look with clamped vertical rotation (looking up/down).
-> 3. Head Bobbing effect when walking.
-> 4. Footstep Audio Manager using RayCast3D to detect floor material (carpet, tile, metal, water).
-> 5. RayCast3D Interaction System using 'E' key to interact with objects that have an `interact()` method (doors, switches, elevator buttons).
-> 6. NO jumping, NO visible player mesh/body.
-> Provide the full GDScript code."
-> 
-> 
+### `FloorRegistry` (data/service)
 
----
+Maps stable IDs to scene paths, elevator transitions, required panel IDs, and safe arrival/Continue spawn marker names. Floor IDs: `F01`…`F15`, `B1`, `B2`, `G`. **No hardcoded special-floor arithmetic**. Every elevator transition has an explicit source/destination. Validate uniqueness and destination existence on startup.
 
-#### 🤖 PROMPT 2: Instant Respawn / Checkpoint Hazard System
+### `SaveManager`
 
-> **Prompt:**
-> "Create a Checkpoint System for Godot 4 (*POOLS* style instant respawn).
-> Requirements:
-> 1. A `CheckpointZone.gd` (`Area3D`) script that updates the Player's `last_safe_position` when entered.
->
-> Write the script for`CheckpointZone.gd`, and the required code integration for `player.gd`."
-> 
-> 
+Persists to `user://savegame.json` (or equivalent user-data location) using versioned JSON. Write to temporary file, flush/close, then safely replace the target; validate on load and handle corruption without crashing. Do not store transient puzzle progress or hazard checkpoints. Save **immediately after successful panel completion**; keep last known good state if save fails. On load, reject unknown IDs safely, fall back to Floor 4 for invalid last floor, and log actionable diagnostics.
 
----
+### `FloorTransition`
 
-#### 🤖 PROMPT 3: Interactive Door & Switch Mechanics
+Single owner of elevator travel. Resolve elevator ID → destination floor scene → arrival marker. Disable input during transfer, close elevator doors, fade, load destination, position player safely, reset movement velocity and temporary hazard checkpoint, then open doors and restore input. Avoid multiple concurrent transfers. On failure, restore source scene/player control without losing saved progress.
 
-> **Prompt:**
-> "Create interactive object scripts for Godot 4:
-> 1. `Door.gd` (`Node3D` / `AnimatableBody3D`): Opens/closes smoothly when interacted with ('E' key), plays open/close audio, and can be locked.
-> 2. `LightSwitch.gd`: Toggles connected `OmniLight3D`/`SpotLight3D` nodes on/off with a click sound.
-> 3. Both scripts must implement an `interact()` function that the player's RayCast3D can call."
-> 
-> 
+### `ElectricalPanel`
 
----
+Unique `panel_id`, linked `elevator_id`, deterministic eight-match solution. The UI tracks **only temporary** correct matches. Wrong attempts do not erase correct matches. Closing an incomplete puzzle discards temporary progress. Completion calls `GameState.complete_panel(panel_id)`, which unlocks the linked elevator and requests save; completed panels render as repaired with a green external indicator. The Basement 2 Master Panel links to remote `F01_GROUND` elevator.
 
-#### 🤖 PROMPT 4: Non-Euclidean Elevator Teleport System
+## 5. State transition contract
 
-> **Prompt:**
-> "Create an Elevator System in Godot 4 for moving vertically between maze sections.
-> Requirements:
-> 1. An Elevator room with interactive door and floor buttons..
-> 2. Open the doors to reveal the new maze area."
-> 
-> 
+```text
+UNREPAIRED panel
+  ├─ open UI → IN_PROGRESS (temporary)
+  │    ├─ wrong pair → same step, previous correct pairs retained
+  │    ├─ exit UI → UNREPAIRED, clear temporary pairs
+  │    └─ eighth correct pair → REPAIRED
+  └─ reopen → fresh eight-pair puzzle
+REPAIRED
+  └─ permanently unlock linked elevator + autosave; never revert
+```
 
----
+Elevator button is inactive until `activated_elevators` contains its ID. **Do not treat cabin door opening as an elevator unlock**.
+
+## 6. Save / Continue / respawn separation
+
+- **Persistent checkpoint:** latest *successful panel activation floor*, saved on disk; Continue uses that floor's safe Continue marker.
+- **Temporary hazard checkpoint:** latest `CheckpointZone` in the currently loaded scene; respawn only. Never overwrites the saved Continue floor.
+- **Scene arrival marker:** destination of a specific elevator transition; distinct from Continue marker.
+- If no panel was completed, New Game and Continue start at Floor 4.
+- After a completed panel on an earlier floor, that earlier floor becomes the latest Continue floor.
+
+Suggested schema:
+
+```json
+{
+  "save_version": 1,
+  "completed_panels": [],
+  "activated_elevators": [],
+  "last_activation_floor": "F04",
+  "last_activation_panel": null,
+  "game_completed": false
+}
+```
+
+`last_activation_floor = F04` before any repair is a default, not evidence of an activated elevator.
+
+## 7. Elevator migration — required correction
+
+The README currently documents `scripts/elevator_panel.gd` as **“E rides to the other car”**. This is **LEGACY PROTOTYPE behavior** and must not be the final architecture. Replace it with real inter-floor scene transitions governed by persistent panel unlock state. The old two-cabins-on-one-floor behavior may remain only in a clearly marked test scene until migration completes.
+
+Do not label this migration complete until a repaired Floor 4 elevator can load a distinct destination floor scene, the destination spawn is safe, and Continue restores the activation floor after relaunch.
+
+## 8. Interaction and audio
+
+- `E` via player's interaction ray for doors, switches, panel access, and elevator buttons.
+- Contextual `[i]` prompt and focused puzzle UI are allowed despite the **no persistent HUD** rule.
+- Footsteps by surface (carpet, tile, marble, concrete, water, metal); ambience: fluorescent hum, HVAC, rain, distant thunder.
+- Red EXIT doors are always locked with audible feedback.
+- Hazards fade quickly and respawn at temporary checkpoint without changing persistent progression.
+
+## 9. AI coding agent rules
+
+1. Read all four `.md` files before proposing changes.
+2. Inspect real `.gd`/`.tscn` files and `project.godot`; do not claim a planned file already exists.
+3. State affected files and migration risks before editing; preserve Level 4 functionality.
+4. Use unique stable floor/panel/elevator IDs, not node display names, for saves.
+5. Never unlock an elevator without its panel (except the remote Master Panel's explicit link).
+6. Do not invent new routes, floors, UI rules, or endings when the specs are silent; flag the unresolved decision.
+7. Deliver incremental features with reproduction steps and acceptance tests.
+8. Prefer signals and a single state owner over scene-to-scene hard references.
+9. Test fresh save, incorrect wire, puzzle cancellation, successful panel, game restart, travel, backtracking, and ending.
+
+## 10. Acceptance criteria for the architectural migration
+
+- Existing Floor 4 remains playable.
+- Save survives full application restart and preserves all repaired panels.
+- Partial puzzle state never survives closing its UI.
+- Elevator unlocks are per-transition and persist.
+- Floor 1 Ground Floor elevator unlocks only after Basement 2 Master Panel completion.
+- Travel changes to a distinct floor scene, never merely to another cabin on the same floor.
+- A missing floor resource or bad save produces safe fallback, not a soft lock or crash.
