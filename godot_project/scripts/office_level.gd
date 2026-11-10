@@ -285,7 +285,6 @@ func _build_props() -> void:
 	_extra_break_rooms()
 	_cubicles()
 	_columns()
-	_security_camera(Vector3(7.55, 2.85, 62.0))
 	_place_more_cameras()
 	_security_room()
 	_stair()
@@ -351,14 +350,45 @@ func _extra_break_rooms() -> void:
 func _place_more_cameras() -> void:
 	var placed := 0
 	for cell in _cells:
-		if placed >= 10:
+		if placed >= 11:
 			break
 		if posmod(cell.x * 5 + cell.y * 2, 13) != 4:
 			continue
-		if _kind_on(cell, "n") == "door" or _is_restroom(cell):
+		if _is_restroom(cell) or cell == Vector2i(6, 2) or cell == Vector2i(-6, 50):
 			continue
-		_security_camera(Vector3(cell.x * CELL + 0.35, 2.85, (cell.y + 1) * CELL - 0.22))
+		var edge := _camera_wall(cell)
+		if edge == "":
+			continue
+		var along := 1.35 if posmod(cell.x, 2) == 0 else 2.65
+		_mount_camera(cell, edge, along)
 		placed += 1
+
+
+func _camera_wall(cell: Vector2i) -> String:
+	var windowed := ""
+	var start := posmod(cell.x + cell.y, 4)
+	for i in 4:
+		var edge := EDGES[(start + i) % 4]
+		var kind := _kind_on(cell, edge)
+		if kind == "wall":
+			return edge
+		if kind == "window" and windowed == "":
+			windowed = edge
+	return windowed
+
+
+func _mount_camera(cell: Vector2i, edge: String, along: float) -> void:
+	# Back plate on the inner face, top of the housing against the ceiling.
+	var at := _on_wall(cell, edge, along)
+	at.y = _ceiling_under(cell) - 0.052
+	_security_camera(at, _face_into_room(edge))
+
+
+func _ceiling_under(cell: Vector2i) -> float:
+	var y := 2.975 + CEILING_LIFT
+	if _tall.has(cell):
+		y += 2.6
+	return y
 
 
 func _place_extinguishers() -> void:
@@ -2493,15 +2523,24 @@ func _ladder_rail(parent: Node3D, a: Vector3, b: Vector3, material: Material) ->
 	parent.add_child(mesh_node)
 
 
-func _security_camera(at: Vector3) -> void:
-	var node := _bk(BK_CAMERA, _geometry, at, 0.0)
+func _security_camera(at: Vector3, yaw: float) -> void:
+	# The mount sits on local Y. Pitching it puts that plate on the wall and the lens into the room.
+	var root := Node3D.new()
+	root.name = "SecurityCamera"
+	root.position = at
+	root.rotation.y = yaw
+	_geometry.add_child(root)
+	var node := BK_CAMERA.instantiate() as Node3D
+	node.rotation.x = PI * 0.5
+	root.add_child(node)
+	_box_around(root)
 	var led := OmniLight3D.new()
 	led.name = "CameraLedLight"
-	led.position = Vector3(0.0, 0.1, 0.08)
+	led.position = Vector3(0.0, -0.04, 0.1)
 	led.light_color = Color(1.0, 0.12, 0.08)
 	led.light_energy = 0.35
 	led.omni_range = 0.8
-	node.add_child(led)
+	root.add_child(led)
 
 
 func _scatter_corner_plants() -> void:
