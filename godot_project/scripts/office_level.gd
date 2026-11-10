@@ -56,6 +56,7 @@ const ELEVATOR_DOORS := preload("res://scripts/elevator_doors.gd")
 const ELEVATOR_PANEL := preload("res://scripts/elevator_panel.gd")
 const FLOOR_EXIT := preload("res://scripts/floor_exit.gd")
 const DOOR_SCRIPT := preload("res://scripts/door.gd")
+const OVERLAP := preload("res://scripts/overlap_resolver.gd")
 
 var _cells: Array[Vector2i] = []
 var _cell_set: Dictionary = {}
@@ -78,7 +79,9 @@ var _cubicle_mat: StandardMaterial3D
 var _cubicle_spots: Array[Dictionary] = []
 var _shelf_spots: Array[Dictionary] = []
 var _cabinet_spots: Array[Vector3] = []
-var _chair_spots: Array[Vector3] = []
+var _storage_cells: Dictionary = {}
+var _crt_spots: Array[Dictionary] = []
+var _tower_rects: Array[Rect2] = []
 var _desk_mat: StandardMaterial3D
 var _metal_mat: StandardMaterial3D
 var _red_mat: StandardMaterial3D
@@ -156,7 +159,7 @@ func _mark_openings() -> void:
 	_mark_door(Vector2i(0, 5), "n")
 	_mark(Vector2i(0, 5), "e", "wall")
 	_mark(Vector2i(-1, 5), "e", "wall")
-	_mark_door(Vector2i(0, 2), "e", true)
+	_mark_door(Vector2i(0, 2), "e")
 	_mark_door(Vector2i(0, 4), "e")
 	_mark_door(Vector2i(-1, 5), "n")
 	_mark_door(Vector2i(1, 5), "n")
@@ -303,6 +306,8 @@ func _build_props() -> void:
 	_alarm_beacon(Vector3(7.9, 2.85, 226.85), -PI * 0.5)
 	_electrical_rooms()
 	_build_restrooms()
+	_place_towers()
+	OVERLAP.resolve(get_tree(), Callable(self, "_inside_wall"))
 
 
 func _break_room() -> void:
@@ -449,7 +454,6 @@ func _security_room() -> void:
 		var x := -15.15 + float(i) * 0.95
 		_crt(_geometry, Vector3(x, 0.90, 64.4), 0.0)
 	_maybe_pencil(_geometry, Vector3(-13.55, 0.90, 64.62))
-	_tower(_geometry, Vector3(-12.7, 0.0, 64.35), 0.0)
 	var screen_light := OmniLight3D.new()
 	screen_light.name = "MonitorGlow"
 	screen_light.position = Vector3(-14.2, 1.3, 64.8)
@@ -1371,7 +1375,10 @@ func _extinguisher(at: Vector3) -> void:
 
 
 func _folding_chair(at: Vector3, yaw: float) -> void:
-	_bk(BK_FOLD_CHAIR, _geometry, at, yaw)
+	if _chair_hits_wall(at, yaw, 0.28, 0.25):
+		return
+	var node := _bk(BK_FOLD_CHAIR, _geometry, at, yaw)
+	node.add_to_group("overlap_movable")
 	return
 	var root := Node3D.new()
 	root.position = at
@@ -1386,6 +1393,12 @@ func _folding_chair(at: Vector3, yaw: float) -> void:
 
 func _crt(parent: Node3D, at: Vector3, yaw: float) -> void:
 	_bk(BK_CRT, parent, at, yaw, 0.42)
+	var world_at := at
+	var world_yaw := yaw
+	if parent != _geometry:
+		world_at = parent.to_global(at)
+		world_yaw += parent.global_rotation.y
+	_crt_spots.append({"at": world_at, "yaw": world_yaw})
 	return
 	var root := Node3D.new()
 	root.name = "Crt"
@@ -1404,24 +1417,141 @@ func _keyboard(parent: Node3D, at: Vector3) -> void:
 	_bk(BK_KEYBOARD, parent, at, 0.0)
 
 
-func _tower(parent: Node3D, at: Vector3, yaw: float) -> void:
-	_bk(BK_TOWER, parent, at, yaw)
-	return
-	var root := Node3D.new()
-	root.name = "Tower"
-	root.position = at
-	root.rotation.y = yaw
-	parent.add_child(root)
-	var case_mat := _mat(Color(0.68, 0.66, 0.62), 0.4, 0.15)
-	var bay := _mat(Color(0.2, 0.2, 0.22), 0.45, 0.2)
-	_part(root, Vector3(0.0, 0.22, 0.0), Vector3(0.2, 0.44, 0.46), case_mat)
-	_bit(root, Vector3(0.0, 0.34, 0.23), Vector3(0.16, 0.04, 0.01), bay)
-	_bit(root, Vector3(0.0, 0.28, 0.23), Vector3(0.16, 0.04, 0.01), bay)
-	_bit(root, Vector3(0.06, 0.12, 0.23), Vector3(0.03, 0.03, 0.01), _mat(Color(0.2, 0.7, 0.3), 0.4, 0.0, Color(0.2, 0.8, 0.3), 1.2))
+func _tower(parent: Node3D, at: Vector3, yaw: float) -> Node3D:
+	var node := _bk(BK_TOWER, parent, at, yaw)
+	node.add_to_group("overlap_fixed")
+	return node
+
+
+# One tower on the floor under each CRT. The spot stays beside the screen,
+# inside the desk footprint, and clear of walls, chairs, and other towers.
+func _place_towers() -> void:
+	var blocks := _floor_blocks()
+	for spot in _crt_spots:
+		var at: Vector3 = spot["at"]
+		var yaw: float = spot["yaw"]
+		_tower_under(at, yaw, blocks)
+
+
+func _tower_under(crt_at: Vector3, crt_yaw: float, blocks: Array[AABB]) -> void:
+	var offsets: Array[Vector3] = [
+		Vector3(0.40, 0.0, 0.0),
+		Vector3(-0.40, 0.0, 0.0),
+		Vector3(0.40, 0.0, 0.30),
+		Vector3(-0.40, 0.0, 0.30),
+		Vector3(0.0, 0.0, 0.32),
+		Vector3(0.40, 0.0, -0.18),
+		Vector3(-0.40, 0.0, -0.18),
+	]
+	var spins: Array[float] = [0.0, 0.0, PI * 0.5, PI * 0.5, PI * 0.5, 0.0, 0.0]
+	var co := cos(crt_yaw)
+	var si := sin(crt_yaw)
+	for i in offsets.size():
+		var off := offsets[i]
+		var at := Vector3(
+			crt_at.x + off.x * co + off.z * si,
+			0.0,
+			crt_at.z - off.x * si + off.z * co
+		)
+		var yaw := crt_yaw + spins[i]
+		var foot := _tower_foot(at, yaw)
+		if not _tower_fits(foot, crt_at, blocks):
+			continue
+		_tower(_geometry, at, yaw)
+		_tower_rects.append(foot.grow(0.04))
+		return
+
+
+func _tower_foot(at: Vector3, yaw: float) -> Rect2:
+	var c := absf(cos(yaw))
+	var s := absf(sin(yaw))
+	var hx := 0.10 * c + 0.22 * s
+	var hz := 0.10 * s + 0.22 * c
+	return Rect2(at.x - hx, at.z - hz, hx * 2.0, hz * 2.0)
+
+
+func _tower_fits(foot: Rect2, crt_at: Vector3, blocks: Array[AABB]) -> bool:
+	if _rect_hits_wall(foot):
+		return false
+	for prev in _tower_rects:
+		if foot.intersects(prev):
+			return false
+	var box := AABB(Vector3(foot.position.x, 0.02, foot.position.y), Vector3(foot.size.x, 0.42, foot.size.y))
+	var crt_flat := Vector2(crt_at.x, crt_at.z)
+	for block in blocks:
+		if not box.intersects(block):
+			continue
+		var area := block.size.x * block.size.z
+		var cover := Rect2(block.position.x, block.position.z, block.size.x, block.size.z)
+		if area > 0.75 and cover.has_point(crt_flat):
+			continue
+		return false
+	return true
+
+
+func _rect_hits_wall(foot: Rect2) -> bool:
+	var center := Vector3(foot.get_center().x, 0.0, foot.get_center().y)
+	var nx := maxi(1, int(ceil(foot.size.x / 0.12)))
+	var nz := maxi(1, int(ceil(foot.size.y / 0.12)))
+	for ix in nx + 1:
+		for iz in nz + 1:
+			var p := Vector3(
+				foot.position.x + foot.size.x * float(ix) / float(nx),
+				0.0,
+				foot.position.y + foot.size.y * float(iz) / float(nz)
+			)
+			if _segment_hits_wall(center, p):
+				return true
+	return false
+
+
+func _floor_blocks() -> Array[AABB]:
+	var out: Array[AABB] = []
+	var pending: Array[Node] = [_geometry]
+	while not pending.is_empty():
+		var node: Node = pending.pop_back()
+		if node is MeshInstance3D:
+			var mesh_node := node as MeshInstance3D
+			if mesh_node.mesh != null:
+				var ab := _mesh_world_aabb(mesh_node)
+				var top := ab.position.y + ab.size.y
+				if top > 0.08 and ab.position.y < 0.50 and ab.size.x > 0.02 and ab.size.z > 0.02:
+					out.append(ab)
+		for child in node.get_children():
+			pending.append(child)
+	return out
+
+
+func _mesh_world_aabb(mesh_node: MeshInstance3D) -> AABB:
+	var ab := mesh_node.get_aabb()
+	var xf := mesh_node.global_transform
+	var merged := AABB()
+	var has := false
+	for i in 8:
+		var corner := Vector3(
+			ab.position.x if (i & 1) == 0 else ab.end.x,
+			ab.position.y if (i & 2) == 0 else ab.end.y,
+			ab.position.z if (i & 4) == 0 else ab.end.z
+		)
+		var world: Vector3 = xf * corner
+		if not has:
+			merged = AABB(world, Vector3.ZERO)
+			has = true
+		else:
+			merged = merged.expand(world)
+	return merged
 
 
 func _office_chair(parent: Node3D, at: Vector3, yaw: float) -> void:
-	_bk(BK_OFFICE_CHAIR, parent, at, yaw)
+	var world_at := at
+	var world_yaw := yaw
+	if parent != _geometry and parent.is_inside_tree():
+		world_at = parent.to_global(at)
+		world_yaw += parent.global_rotation.y
+	if _chair_hits_wall(world_at, world_yaw, 0.82, 0.52, 0.25):
+		return
+	var node := _bk(BK_OFFICE_CHAIR, parent, at, yaw)
+	node.add_to_group("overlap_movable")
 	return
 	var root := Node3D.new()
 	root.name = "OfficeChair"
@@ -1547,7 +1677,6 @@ func _crt_room() -> void:
 	_crt(_geometry, Vector3(-8.0, 0.82, 151.05), PI)
 	_keyboard(_geometry, Vector3(-8.05, 0.82, 150.75))
 	_maybe_pencil(_geometry, Vector3(-7.35, 0.82, 151.25))
-	_tower(_geometry, Vector3(-6.95, 0.0, 151.2), PI)
 	_printer(_geometry, Vector3(-8.35, 0.82, 151.15))
 	_seat(crt_desk, "s", 0.0, "swivel")
 	var tube := OmniLight3D.new()
@@ -1720,11 +1849,8 @@ func _seat(table: Vector3, side: String, along: float, kind: String, clear: floa
 			yaw = PI * 0.5
 	var reach := 0.82 if kind == "swivel" else 0.36
 	var wide := 0.5 if kind == "swivel" else 0.26
-	var gap := 1.15 if kind == "swivel" else 0.75
-	at = _move_chair_clear(at, yaw, table, reach, wide, gap)
-	if at.y < -0.5:
+	if _chair_hits_wall(at, yaw, reach, wide):
 		return
-	_chair_spots.append(at)
 	if kind == "swivel":
 		_office_chair(_geometry, at, yaw)
 	elif kind == "fold":
@@ -1782,38 +1908,52 @@ func _table_finish(source: StandardMaterial3D, albedo: Color, metal: float, roug
 	return copy
 
 
-func _move_chair_clear(at: Vector3, yaw: float, table: Vector3, reach: float, wide: float, gap: float) -> Vector3:
-	if not _chair_hits_wall(at, yaw, reach, wide) and not _chair_on_table(at, yaw, table):
-		return at
-	# Step into the open floor, beside the table, clear of the other chairs.
-	var facing := Vector3(sin(yaw), 0.0, cos(yaw))
-	var right := Vector3(facing.z, 0.0, -facing.x)
-	var away := -facing
-	var along_steps: Array[float] = [0.4, 0.9, 1.4, 2.0, 0.0]
-	var side_steps: Array[float] = [1.4, -1.4, 2.3, -2.3, 3.1, -3.1]
-	for along in along_steps:
-		for side in side_steps:
-			var spot := at + away * along + right * side
-			if _chair_hits_wall(spot, yaw, reach, wide) or _chair_on_table(spot, yaw, table):
-				continue
-			if not _clear_of_chairs(spot, gap):
-				continue
-			return spot
-	return Vector3(0.0, -1.0, 0.0)
-
-
-func _chair_hits_wall(at: Vector3, yaw: float, reach: float, wide: float) -> bool:
+func _chair_hits_wall(at: Vector3, yaw: float, reach: float, wide: float, front: float = -1.0) -> bool:
+	var nose := reach if front < 0.0 else front
 	var co := cos(yaw)
 	var si := sin(yaw)
 	var locals: Array[Vector3] = [
+		Vector3(0.0, 0.0, 0.0),
 		Vector3(0.0, 0.0, -reach),
-		Vector3(-wide, 0.0, -reach * 0.5),
-		Vector3(wide * 0.6, 0.0, -reach * 0.5),
+		Vector3(0.0, 0.0, nose),
+		Vector3(-wide, 0.0, -reach),
+		Vector3(wide, 0.0, -reach),
+		Vector3(-wide, 0.0, 0.0),
+		Vector3(wide, 0.0, 0.0),
 	]
 	for local in locals:
 		var world := at + Vector3(local.x * co + local.z * si, 0.0, -local.x * si + local.z * co)
-		if _inside_wall(world):
+		# The backrest can pass through a thin wall and land in the next room.
+		if _segment_hits_wall(at, world):
 			return true
+	return false
+
+
+func _segment_hits_wall(a: Vector3, b: Vector3) -> bool:
+	var span := a.distance_to(b)
+	var steps := maxi(1, int(ceil(span / 0.12)))
+	var prev := Vector2i(int(floor(a.x / CELL)), int(floor(a.z / CELL)))
+	for i in steps + 1:
+		var p := a.lerp(b, float(i) / float(steps))
+		if _inside_wall(p):
+			return true
+		var cell := Vector2i(int(floor(p.x / CELL)), int(floor(p.z / CELL)))
+		if cell == prev:
+			continue
+		var edge := ""
+		if cell.x > prev.x:
+			edge = "e"
+		elif cell.x < prev.x:
+			edge = "w"
+		elif cell.y > prev.y:
+			edge = "n"
+		elif cell.y < prev.y:
+			edge = "s"
+		if edge != "" and _is_solid_edge(_kind_on(prev, edge)):
+			return true
+		if not _cell_set.has(cell):
+			return true
+		prev = cell
 	return false
 
 
@@ -1823,7 +1963,7 @@ func _inside_wall(at: Vector3) -> bool:
 		return true
 	var lx := at.x - float(cell.x) * CELL
 	var lz := at.z - float(cell.y) * CELL
-	var limit := 0.14
+	var limit := 0.12
 	if _is_solid_edge(_kind_on(cell, "w")) and lx < limit:
 		return true
 	if _is_solid_edge(_kind_on(cell, "e")) and lx > CELL - limit:
@@ -1835,35 +1975,11 @@ func _inside_wall(at: Vector3) -> bool:
 	return false
 
 
-func _chair_on_table(at: Vector3, yaw: float, table: Vector3) -> bool:
-	var co := cos(yaw)
-	var si := sin(yaw)
-	var locals: Array[Vector3] = [
-		Vector3(0.0, 0.0, -0.15),
-		Vector3(0.0, 0.0, -0.45),
-		Vector3(-0.28, 0.0, -0.3),
-		Vector3(0.2, 0.0, -0.3),
-	]
-	var min_x := table.x - 0.62
-	var max_x := table.x + 1.48
-	var min_z := table.z - 0.58
-	var max_z := table.z + 0.68
-	for local in locals:
-		var world := at + Vector3(local.x * co + local.z * si, 0.0, -local.x * si + local.z * co)
-		if world.x > min_x and world.x < max_x and world.z > min_z and world.z < max_z:
-			return true
-	return false
-
-
-func _clear_of_chairs(at: Vector3, gap: float) -> bool:
-	for spot in _chair_spots:
-		if Vector2(at.x - spot.x, at.z - spot.z).length() < gap:
-			return false
-	return true
-
-
 func _chair(at: Vector3, yaw: float = 0.0) -> void:
-	_bk(BK_WOOD_CHAIR, _geometry, at, yaw)
+	if _chair_hits_wall(at, yaw, 0.32, 0.22):
+		return
+	var node := _bk(BK_WOOD_CHAIR, _geometry, at, yaw)
+	node.add_to_group("overlap_movable")
 	return
 	var root := Node3D.new()
 	root.name = "Chair"
@@ -1922,6 +2038,8 @@ func _bk(packed: PackedScene, parent: Node, at: Vector3, yaw: float, fit_height:
 			node.scale = Vector3(fitted, fitted, fitted)
 			node.position.y = at.y - box.position.y * fitted
 	_box_around(node)
+	if packed == BK_TABLE or packed == BK_SHELF or packed == BK_CABINET or packed == BK_PLANT or packed == BK_TREE:
+		node.add_to_group("overlap_fixed")
 	return node
 
 
@@ -2020,8 +2138,14 @@ func _furnish_half() -> void:
 				stack.append(nxt)
 		rooms.append(room)
 	rooms.sort_custom(_room_before)
+	var storage_index := _storage_index(rooms)
 	var placed := 0
 	for index in rooms.size():
+		if index == storage_index:
+			_storage_room(rooms[index])
+			if index % 2 == 0:
+				placed += 1
+			continue
 		if index % 2 == 1:
 			# A share of the bare rooms becomes an office with a computer.
 			# The rest gets a table: conference (photo 25) or a plain table (photo 18).
@@ -2032,6 +2156,109 @@ func _furnish_half() -> void:
 			continue
 		_furnish_room(rooms[index], placed)
 		placed += 1
+
+
+func _storage_index(rooms: Array) -> int:
+	var best := -1
+	var best_size := 99
+	for index in rooms.size():
+		var room: Array = rooms[index]
+		if room.size() > 3 or _room_has_elevator(room) or not _room_has_door(room):
+			continue
+		var few := posmod(index, 8) == 7 or (index % 2 == 0 and room.size() <= 2)
+		if not few:
+			continue
+		if room.size() < best_size:
+			best = index
+			best_size = room.size()
+	if best >= 0:
+		return best
+	for index in rooms.size():
+		var room: Array = rooms[index]
+		if room.size() <= 2 and _room_has_door(room) and not _room_has_elevator(room):
+			return index
+	return -1
+
+
+func _room_has_door(room: Array) -> bool:
+	return _room_has_kind(room, "door")
+
+
+func _room_has_elevator(room: Array) -> bool:
+	return _room_has_kind(room, "elevator")
+
+
+func _room_has_kind(room: Array, wanted: String) -> bool:
+	for item in room:
+		var cell: Vector2i = item
+		for edge in EDGES:
+			if _kind_on(cell, edge) == wanted:
+				return true
+	return false
+
+
+func _storage_room(room: Array) -> void:
+	for item in room:
+		_storage_cells[item] = true
+	if room.size() <= 2:
+		for item in room:
+			var cell: Vector2i = item
+			_fill_storage(cell)
+		return
+	_fill_storage(_anchor_cell(room))
+
+
+func _fill_storage(cell: Vector2i) -> void:
+	var door := ""
+	for edge in EDGES:
+		var kind := _kind_on(cell, edge)
+		if kind == "door" or kind == "elevator":
+			door = edge
+			break
+	var far := _back_wall(cell)
+	if door != "":
+		far = _opposite(door)
+	for edge in EDGES:
+		if edge == door or not _is_solid_edge(_kind_on(cell, edge)):
+			continue
+		var yaw := _face_into_room(edge)
+		if edge == far:
+			_metal_shelf(_shelf_against(cell, edge, 1.2), yaw)
+			_metal_shelf(_shelf_against(cell, edge, 2.8), yaw)
+		else:
+			_metal_shelf(_shelf_against(cell, edge, 2.0), yaw)
+	if door != "":
+		_storage_cabinet(cell, door, 0.7)
+		_storage_cabinet(cell, door, 3.3)
+	_storage_boxes(cell, door)
+
+
+func _shelf_against(cell: Vector2i, edge: String, along: float) -> Vector3:
+	return _on_wall(cell, edge, along) - _edge_dir(edge) * 0.30
+
+
+func _storage_cabinet(cell: Vector2i, edge: String, along: float) -> void:
+	var at := _on_wall(cell, edge, along) - _edge_dir(edge) * 0.37
+	_filing_cabinet(at, _face_into_room(edge))
+	_cabinet_spots.append(at)
+
+
+func _storage_boxes(cell: Vector2i, door: String) -> void:
+	var at := Vector3(cell.x * CELL + 2.0, 0.0, cell.y * CELL + 2.0)
+	if door != "":
+		at -= _edge_dir(door) * 0.45
+	_cardboard_box(at + Vector3(-0.55, 0.0, -0.15), Vector3(0.46, 0.34, 0.38))
+	_cardboard_box(at + Vector3(-0.55, 0.34, -0.15), Vector3(0.40, 0.28, 0.32))
+	_cardboard_box(at + Vector3(0.48, 0.0, 0.05), Vector3(0.52, 0.38, 0.42))
+	_cardboard_box(at + Vector3(-0.02, 0.0, 0.48), Vector3(0.36, 0.30, 0.34))
+
+
+func _cardboard_box(at: Vector3, size: Vector3) -> void:
+	var cardboard := _mat(Color(0.58, 0.42, 0.27), 0.78)
+	var body := _solid("Box", at + Vector3(0.0, size.y * 0.5, 0.0), size, cardboard)
+	var tape := _mat(Color(0.76, 0.66, 0.42), 0.62)
+	_bit(body, Vector3(0.0, size.y * 0.5 + 0.002, 0.0), Vector3(size.x * 0.14, 0.004, size.z * 0.98), tape)
+	_bit(body, Vector3(0.0, 0.0, size.z * 0.5 + 0.002), Vector3(size.x * 0.14, size.y * 0.96, 0.004), tape)
 
 
 func _room_before(a: Array, b: Array) -> bool:
@@ -2117,7 +2344,6 @@ func _furnish_room(room: Array, variant: int) -> void:
 			_table(pos)
 			_crt(_geometry, pos + Vector3(-0.1, 0.82, -0.12), 0.0)
 			_keyboard(_geometry, pos + Vector3(-0.05, 0.82, 0.18))
-			_tower(_geometry, pos + Vector3(0.85, 0.0, -0.1), 0.0)
 			_maybe_pencil(_geometry, pos + Vector3(0.55, 0.82, 0.28))
 			_seat(pos, "n", 0.0, "swivel")
 		3:
@@ -2602,6 +2828,8 @@ func _plant_room(cell: Vector2i) -> bool:
 		return false
 	if cell == Vector2i(6, 22) or cell == Vector2i(-1, 5) or _is_restroom(cell):
 		return false
+	if _storage_cells.has(cell):
+		return false
 	return true
 
 
@@ -2942,35 +3170,23 @@ func _filing_cabinet(at: Vector3, yaw: float) -> void:
 func _conference_eight(at: Vector3) -> void:
 	var cell := Vector2i(int(floor(at.x / CELL)), int(floor(at.z / CELL)))
 	var spot := at
-	var open_x := false
-	var open_z := false
 	# The table sits in a corner. Slide it into the open floor so the chairs fit beside it.
 	if _is_solid_edge(_kind_on(cell, "e")) and _kind_on(cell, "w") == "none":
 		spot.x -= 1.15
-		open_x = true
 	elif _is_solid_edge(_kind_on(cell, "w")) and _kind_on(cell, "e") == "none":
 		spot.x += 1.15
-		open_x = true
-	elif _kind_on(cell, "e") == "none" or _kind_on(cell, "w") == "none":
-		open_x = true
 	if _is_solid_edge(_kind_on(cell, "n")) and _kind_on(cell, "s") == "none":
 		spot.z -= 0.45
-		open_z = true
 	elif _is_solid_edge(_kind_on(cell, "s")) and _kind_on(cell, "n") == "none":
 		spot.z += 0.45
-		open_z = true
-	elif _kind_on(cell, "n") == "none" or _kind_on(cell, "s") == "none":
-		open_z = true
 	_conference_table(spot)
-	var along := 1.15 if open_x else 0.85
-	var side_clear := 0.62 if open_z else 0.34
-	var end_clear := 0.55 if open_x else 0.34
-	var slots: Array[float] = [-along, 0.0, along]
-	for i in slots.size():
-		_seat(spot, "n", slots[i], "swivel", side_clear)
-		_seat(spot, "s", slots[i], "swivel", side_clear)
-	_seat(spot, "e", 0.0, "swivel", end_clear)
-	_seat(spot, "w", 0.0, "swivel", end_clear)
+	# Grey top from the reference photo, centred on spot. Chairs that meet a wall are dropped.
+	var alongs: Array[float] = [-0.9, 0.0, 0.9]
+	for along in alongs:
+		_seat_photo(spot, "n", along)
+		_seat_photo(spot, "s", along)
+	_seat_photo(spot, "e", 0.0)
+	_seat_photo(spot, "w", 0.0)
 
 
 func _small_conference(at: Vector3) -> void:
@@ -2994,8 +3210,61 @@ func _small_conference(at: Vector3) -> void:
 	_task_chair(at + Vector3(0.0, 0.0, -1.25), 0.0)
 
 
+func _seat_photo(table: Vector3, side: String, along: float) -> void:
+	var gap := 0.4
+	var at := table
+	var yaw := 0.0
+	match side:
+		"n":
+			at += Vector3(along, 0.0, 0.6 + gap)
+			yaw = PI
+		"s":
+			at += Vector3(along, 0.0, -0.6 - gap)
+			yaw = 0.0
+		"e":
+			at += Vector3(1.2 + gap, 0.0, along)
+			yaw = -PI * 0.5
+		_:
+			at += Vector3(-1.2 - gap, 0.0, along)
+			yaw = PI * 0.5
+	_office_chair(_geometry, at, yaw)
+
+
+func _photo_conference_table(at: Vector3) -> void:
+	var root := Node3D.new()
+	root.name = "PhotoConference"
+	root.position = at
+	_geometry.add_child(root)
+	root.add_to_group("overlap_fixed")
+	var top := _mat(Color(0.62, 0.64, 0.66), 0.4, 0.08)
+	var wood := _mat(Color(0.42, 0.26, 0.15), 0.52)
+	var metal := _mat(Color(0.4, 0.42, 0.44), 0.32, 0.7)
+	_part(root, Vector3(0.0, 0.74, 0.0), Vector3(2.4, 0.045, 1.2), top)
+	_bit(root, Vector3(0.0, 0.766, 0.0), Vector3(2.2, 0.008, 0.11), wood)
+	var ends: Array[float] = [-0.95, 0.95]
+	for x in ends:
+		_photo_leg(root, x, metal)
+
+
+func _photo_leg(parent: Node3D, x: float, material: Material) -> void:
+	var sides: Array[float] = [-1.0, 1.0]
+	for side in sides:
+		var top := Vector3(x, 0.7, side * 0.18)
+		var foot := Vector3(x, 0.02, side * 0.52)
+		var delta := foot - top
+		var mesh_node := MeshInstance3D.new()
+		mesh_node.position = (top + foot) * 0.5
+		mesh_node.rotation.x = atan2(delta.z, delta.y)
+		var box := BoxMesh.new()
+		box.size = Vector3(0.04, delta.length(), 0.04)
+		mesh_node.mesh = box
+		mesh_node.material_override = material
+		parent.add_child(mesh_node)
+	_part(parent, Vector3(x, 0.025, 0.0), Vector3(0.045, 0.03, 1.04), material)
+
+
 func _conference_table(at: Vector3) -> void:
-	_spawn_table(at)
+	_photo_conference_table(at)
 	return
 	var root := Node3D.new()
 	root.name = "ConferenceTable"
