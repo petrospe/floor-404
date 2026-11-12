@@ -22,6 +22,7 @@ const BK_OFFICE_CHAIR := preload("res://models/blendkit/office_chair.glb")
 const BK_WOOD_CHAIR := preload("res://models/blendkit/wooden_chair.glb")
 const BK_FOLD_CHAIR := preload("res://models/blendkit/folding_chair.glb")
 const BK_TABLE := preload("res://models/blendkit/conference.glb")
+const BK_WORKPLACE := preload("res://models/blendkit/office_workplace.glb")
 const BK_CRT := preload("res://models/blendkit/crt.glb")
 const BK_KEYBOARD := preload("res://models/blendkit/keyboard.glb")
 const BK_TOWER := preload("res://models/blendkit/tower.glb")
@@ -81,6 +82,7 @@ var _cubicle_spots: Array[Dictionary] = []
 var _shelf_spots: Array[Dictionary] = []
 var _cabinet_spots: Array[Vector3] = []
 var _storage_cells: Dictionary = {}
+var _workplace_cells: Dictionary = {}
 var _crt_spots: Array[Dictionary] = []
 var _tower_rects: Array[Rect2] = []
 var _desk_mat: StandardMaterial3D
@@ -2170,8 +2172,16 @@ func _furnish_half() -> void:
 		rooms.append(room)
 	rooms.sort_custom(_room_before)
 	var storage_index := _storage_index(rooms)
+	var workplaces := _workplace_picks(rooms, storage_index)
 	var placed := 0
 	for index in rooms.size():
+		if workplaces.has(index):
+			var desk_cell: Vector2i = workplaces[index]
+			_workplace_cells[desk_cell] = true
+			_place_workplace(desk_cell)
+			if index % 2 == 0:
+				placed += 1
+			continue
 		if index == storage_index:
 			_storage_room(rooms[index])
 			if index % 2 == 0:
@@ -2290,6 +2300,115 @@ func _cardboard_box(at: Vector3, size: Vector3) -> void:
 	var tape := _mat(Color(0.76, 0.66, 0.42), 0.62)
 	_bit(body, Vector3(0.0, size.y * 0.5 + 0.002, 0.0), Vector3(size.x * 0.14, 0.004, size.z * 0.98), tape)
 	_bit(body, Vector3(0.0, 0.0, size.z * 0.5 + 0.002), Vector3(size.x * 0.14, size.y * 0.96, 0.004), tape)
+
+
+func _workplace_picks(rooms: Array, storage_index: int) -> Dictionary:
+	var picked: Dictionary = {}
+	for limit in [2, 4]:
+		if picked.size() >= 7:
+			break
+		for index in rooms.size():
+			if picked.size() >= 7 or index == storage_index or picked.has(index):
+				continue
+			var room: Array = rooms[index]
+			if room.size() > limit or _room_has_elevator(room) or not _room_has_door(room):
+				continue
+			if not _workplace_room_ok(room):
+				continue
+			var cell := _workplace_cell(room)
+			if not _workplace_fits(cell, room):
+				continue
+			picked[index] = cell
+	return picked
+
+
+func _workplace_room_ok(room: Array) -> bool:
+	for item in room:
+		var cell: Vector2i = item
+		if _is_restroom(cell) or cell == Vector2i(-1, 5) or cell == Vector2i(6, 22):
+			return false
+	return true
+
+
+func _workplace_cell(room: Array) -> Vector2i:
+	for item in room:
+		var cell: Vector2i = item
+		var has_door := false
+		for edge in EDGES:
+			if _kind_on(cell, edge) == "door":
+				has_door = true
+				break
+		if not has_door:
+			return cell
+	return room[0]
+
+
+func _workplace_entry(cell: Vector2i) -> String:
+	for edge in EDGES:
+		if _kind_on(cell, edge) == "door":
+			return edge
+	for edge in EDGES:
+		if _kind_on(cell, edge) == "none":
+			return edge
+	return "s"
+
+
+func _workplace_yaw(entry: String) -> float:
+	# Local +Z is the monitor side. A quarter turn counterclockwise from the
+	# wall opposite the entrance, so the set sits sideways in the room.
+	match entry:
+		"s":
+			return -PI * 0.5
+		"n":
+			return PI * 0.5
+		"e":
+			return PI
+		_:
+			return 0.0
+
+
+func _workplace_foot(at: Vector3, yaw: float) -> Rect2:
+	var c := absf(cos(yaw))
+	var s := absf(sin(yaw))
+	var hx := 1.18 * c + 0.84 * s
+	var hz := 1.18 * s + 0.84 * c
+	return Rect2(at.x - hx, at.z - hz, hx * 2.0, hz * 2.0)
+
+
+func _workplace_pose(cell: Vector2i) -> Dictionary:
+	var entry := _workplace_entry(cell)
+	var yaw := _workplace_yaw(entry)
+	var at := Vector3(float(cell.x) * CELL + 2.0, 0.0, float(cell.y) * CELL + 2.0)
+	at += _edge_dir(_opposite(entry)) * 0.35
+	return {"at": at, "yaw": yaw, "foot": _workplace_foot(at, yaw)}
+
+
+func _workplace_fits(cell: Vector2i, room: Array) -> bool:
+	var pose := _workplace_pose(cell)
+	var foot: Rect2 = pose["foot"]
+	if _rect_hits_wall(foot):
+		return false
+	var allowed: Dictionary = {}
+	for item in room:
+		allowed[item] = true
+	var points: Array[Vector3] = [
+		Vector3(foot.position.x, 0.0, foot.position.y),
+		Vector3(foot.position.x + foot.size.x, 0.0, foot.position.y),
+		Vector3(foot.position.x, 0.0, foot.position.y + foot.size.y),
+		Vector3(foot.position.x + foot.size.x, 0.0, foot.position.y + foot.size.y),
+		Vector3(foot.get_center().x, 0.0, foot.get_center().y),
+	]
+	for point in points:
+		var here := Vector2i(int(floor(point.x / CELL)), int(floor(point.z / CELL)))
+		if not allowed.has(here):
+			return false
+	return true
+
+
+func _place_workplace(cell: Vector2i) -> void:
+	var pose := _workplace_pose(cell)
+	var node := _bk(BK_WORKPLACE, _geometry, pose["at"], float(pose["yaw"]))
+	node.add_to_group("overlap_fixed")
 
 
 func _room_before(a: Array, b: Array) -> bool:
@@ -2859,7 +2978,7 @@ func _plant_room(cell: Vector2i) -> bool:
 		return false
 	if cell == Vector2i(6, 22) or cell == Vector2i(-1, 5) or _is_restroom(cell):
 		return false
-	if _storage_cells.has(cell):
+	if _storage_cells.has(cell) or _workplace_cells.has(cell):
 		return false
 	return true
 
