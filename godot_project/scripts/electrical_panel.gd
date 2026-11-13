@@ -2,7 +2,7 @@ class_name ElectricalPanel
 extends StaticBody3D
 
 const UI := preload("res://scripts/electrical_panel_ui.gd")
-## Wall panel. Eight wires, one mapped elevator. A finished panel stays green.
+## Wall panel. Eight wires, one mapped elevator. Red until solved, then green.
 
 @export var panel_id: String = ""
 @export var show_plate: bool = true
@@ -11,6 +11,7 @@ var _lamp_mat: StandardMaterial3D
 
 
 func _ready() -> void:
+	add_to_group(&"electrical_panel")
 	_build()
 	_apply_lamp()
 	if not GameState.panel_completed.is_connected(_on_panel_completed):
@@ -18,8 +19,6 @@ func _ready() -> void:
 
 
 func interact(_interactor: Node = null) -> void:
-	if GameState.is_panel_complete(panel_id):
-		return
 	UI.open(self)
 
 
@@ -40,28 +39,31 @@ func _apply_lamp() -> void:
 		_lamp_mat.emission = Color(0.25, 1.0, 0.45)
 		_lamp_mat.emission_energy_multiplier = 2.2
 	else:
-		_lamp_mat.albedo_color = Color(0.28, 0.16, 0.08)
-		_lamp_mat.emission = Color(0.35, 0.12, 0.04)
-		_lamp_mat.emission_energy_multiplier = 0.35
+		_lamp_mat.albedo_color = Color(0.62, 0.05, 0.04)
+		_lamp_mat.emission = Color(1.0, 0.08, 0.05)
+		_lamp_mat.emission_energy_multiplier = 2.0
 
 
 func _build() -> void:
 	var steel := _mat(Color(0.55, 0.56, 0.58), 0.45, 0.35)
 	var dark := _mat(Color(0.08, 0.09, 0.1), 0.55, 0.1)
-	_lamp_mat = _mat(Color(0.28, 0.16, 0.08), 0.4, 0.05)
+	_lamp_mat = _mat(Color(0.62, 0.05, 0.04), 0.4, 0.05)
 	_lamp_mat.emission_enabled = true
 	if show_plate:
 		_box(Vector3(0.0, 0.0, -0.02), Vector3(0.62, 0.84, 0.04), steel)
 		_box(Vector3(0.0, 0.02, -0.045), Vector3(0.46, 0.62, 0.012), dark)
+		_box(Vector3(0.22, 0.32, -0.05), Vector3(0.06, 0.06, 0.02), _lamp_mat)
+		var shape := CollisionShape3D.new()
+		var box := BoxShape3D.new()
+		box.size = Vector3(0.64, 0.9, 0.08)
+		shape.shape = box
+		shape.position = Vector3(0.0, 0.0, -0.03)
+		add_child(shape)
 	else:
-		_box(Vector3(0.0, 0.0, -0.02), Vector3(0.5, 0.7, 0.04), steel)
-	_box(Vector3(0.22, 0.32, -0.05), Vector3(0.06, 0.06, 0.02), _lamp_mat)
-	var shape := CollisionShape3D.new()
-	var box := BoxShape3D.new()
-	box.size = Vector3(0.64, 0.9, 0.08)
-	shape.shape = box
-	shape.position = Vector3(0.0, 0.0, -0.03)
-	add_child(shape)
+		# Closet cabinets are the interactable. This node is only the wall lamp.
+		var housing := _mat(Color(0.16, 0.16, 0.17), 0.5, 0.45)
+		_box(Vector3(0.0, 0.0, -0.01), Vector3(0.1, 0.1, 0.012), housing)
+		_box(Vector3(0.0, 0.0, -0.02), Vector3(0.055, 0.055, 0.01), _lamp_mat)
 
 
 func _box(at: Vector3, size: Vector3, material: Material) -> void:

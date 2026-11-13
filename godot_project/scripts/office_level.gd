@@ -52,11 +52,13 @@ const BK_NOTES := preload("res://models/blendkit/sticky_notes.glb")
 const BK_TOILET := preload("res://models/blendkit/toilet.glb")
 const BK_SINK := preload("res://models/blendkit/sink.glb")
 const BK_MIRROR := preload("res://models/blendkit/mirror.glb")
+const BK_BATHROOM_SIGN := preload("res://models/blendkit/bathroom_sign.glb")
 const TILE_TEX := preload("res://models/blendkit/white_tiles.jpg")
 const ALARM_BEACON := preload("res://scripts/alarm_beacon.gd")
 const ELEVATOR_DOORS := preload("res://scripts/elevator_doors.gd")
 const ELEVATOR_PANEL := preload("res://scripts/elevator_panel.gd")
 const FLOOR_PANEL := preload("res://scripts/electrical_panel.gd")
+const CABINET_LINK := preload("res://scripts/cabinet_panel_link.gd")
 const FLOOR_EXIT := preload("res://scripts/floor_exit.gd")
 const DOOR_SCRIPT := preload("res://scripts/door.gd")
 const OVERLAP := preload("res://scripts/overlap_resolver.gd")
@@ -72,6 +74,7 @@ var _flicker_lights: Array[OmniLight3D] = []
 var _flicker_energy: Array[float] = []
 var _overrides: Dictionary = {}
 var _door_flags: Dictionary = {}
+var _door_frames: Dictionary = {}
 var _geometry: Node3D
 var _prop_index := 0
 var _table_serial := 0
@@ -226,6 +229,7 @@ func _build_shell() -> void:
 					_tint_edge(window, canon_cell, canon_edge)
 				"door":
 					var door := _place_door(canon_cell, canon_edge, key)
+					_door_frames[key] = door
 					_above_opening(door)
 					_tint_edge(door, canon_cell, canon_edge)
 				"elevator":
@@ -1134,9 +1138,9 @@ func _progression_hooks() -> void:
 	_spawn_marker("ContinueSpawn", Vector3(2.0, 0.05, 2.0), PI)
 	_spawn_marker("FromF03", Vector3(21.2, 0.05, 10.0), PI * 0.5)
 	_spawn_marker("FromF05", Vector3(-18.2, 0.05, 202.0), -PI * 0.5)
-	# In front of the existing wall cabinets, readable from inside the closet.
-	_floor_panel("F04_DOWN_PANEL", Vector3(-0.45, 1.35, 22.45), PI * 0.5, false)
-	_floor_panel("F04_UP_PANEL", Vector3(25.9, 1.35, 91.55), 0.0, false)
+	# Small status lamp on the wall, centered above each floor cabinet.
+	_floor_panel("F04_DOWN_PANEL", Vector3(-0.12, 2.1, 20.9), PI * 0.5, false)
+	_floor_panel("F04_UP_PANEL", Vector3(25.05, 2.1, 88.12), PI, false)
 	FloorTransition.apply_pending_spawn(self)
 
 
@@ -2797,8 +2801,10 @@ func _conference_wall(cell: Vector2i) -> void:
 
 func _panel_cabinet(at: Vector3, yaw: float) -> void:
 	# Pitch first, then yaw, so the 1.9 m face stands on the floor and turns toward the room.
+	# The link only forwards E. Position, yaw, and the imported mesh stay as they were.
 	var root := Node3D.new()
 	root.name = "PanelCabinet"
+	root.set_script(CABINET_LINK)
 	root.position = at
 	root.rotation.y = yaw
 	_geometry.add_child(root)
@@ -3578,11 +3584,11 @@ func _build_restrooms() -> void:
 		# clear of the sinks on the south wall.
 		_toilet_bank("e", x0, x1, south0, south1, "s")
 		_sink_bank("s", x0, x1, south0, south1)
-		_wc_sign(Vector2i(1, band + 1), "e", "WC Gentlemen")
+		_wc_symbol(Vector2i(1, band + 1), "e", "HOMEM")
 		# North room opens east. Toilets stay clear of the sinks on the north wall.
 		_toilet_bank("w", x0, x1, south1, north1, "n")
 		_sink_bank("n", x0, x1, south1, north1)
-		_wc_sign(Vector2i(3, band + 3), "e", "WC Ladies")
+		_wc_symbol(Vector2i(3, band + 3), "e", "MULHER")
 
 
 func _dress_restroom(x0: int, x1: int, z0: int, z1: int, wall_ns: Material, wall_ew: Material, floor_tile: Material) -> void:
@@ -3733,39 +3739,100 @@ func _stall_door(at: Vector3, yaw: float, width: float, white: Material) -> void
 	_geometry.add_child(body)
 
 
-func _wc_sign(cell: Vector2i, edge: String, text: String) -> void:
-	# Beside the leaf, on the corridor face, so the letters read before you enter.
+func _wc_symbol(cell: Vector2i, edge: String, token: String) -> void:
+	# The Blendkit set is three plates lying flat. Stand one on the corridor face.
+	var frame := _door_frames.get(_edge_key(cell, edge)) as Node3D
+	if frame == null:
+		return
+	var door := frame.find_child("Door", true, false) as Node3D
+	if door == null:
+		return
 	var room := cell + _delta(edge)
-	var along := 0.66
-	var face: Vector3
-	var yaw: float
-	if _is_restroom(room):
-		face = _on_wall(cell, edge, along) - _edge_dir(edge) * 0.02
-		yaw = _face_into_room(edge)
-	else:
-		var corridor_edge := _opposite(edge)
-		face = _on_wall(room, corridor_edge, along) - _edge_dir(corridor_edge) * 0.02
-		yaw = _face_into_room(corridor_edge)
-	var plate := _mat(Color(0.22, 0.23, 0.25), 0.4, 0.55)
-	var letters := _mat(Color(0.84, 0.86, 0.88), 0.22, 0.86)
-	var root := Node3D.new()
-	root.name = "WcSign"
-	root.position = Vector3(face.x, 1.55, face.z)
-	root.rotation.y = yaw
-	_geometry.add_child(root)
-	_bit(root, Vector3(0.0, 0.0, 0.006), Vector3(0.96, 0.28, 0.012), plate)
-	var mesh_node := MeshInstance3D.new()
-	var text_mesh := TextMesh.new()
-	text_mesh.text = text
-	text_mesh.font_size = 40
-	text_mesh.pixel_size = 0.0026
-	text_mesh.depth = 0.008
-	text_mesh.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	text_mesh.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	mesh_node.mesh = text_mesh
-	mesh_node.position = Vector3(0.0, 0.0, 0.016)
-	mesh_node.material_override = letters
-	root.add_child(mesh_node)
+	var corridor := -_edge_dir(edge) if _is_restroom(room) else _edge_dir(edge)
+	var outward := corridor.dot(door.global_transform.basis.z) > 0.0
+	var mount := Node3D.new()
+	mount.name = "WcSymbol"
+	# Leaf collision is centered near z -0.025. Sit the plaque just off that face.
+	mount.position = Vector3(0.6, 1.52, 0.016 if outward else -0.066)
+	mount.rotation.y = 0.0 if outward else PI
+	door.add_child(mount)
+	var sign := BK_BATHROOM_SIGN.instantiate() as Node3D
+	mount.add_child(sign)
+	var plate := _find_plate(sign, token)
+	if plate == null:
+		mount.queue_free()
+		return
+	_keep_plate(sign, plate)
+	_cull_sign_back(plate)
+	# Imported plate faces +Y, head toward -Z. This stands it up, face toward +Z.
+	sign.rotation.x = PI * 0.5
+	var fit := 1.55
+	sign.scale = Vector3(fit, fit, fit)
+	sign.position = -mount.to_local(plate.global_position)
+
+
+func _find_plate(root: Node, token: String) -> MeshInstance3D:
+	var pending: Array[Node] = [root]
+	while not pending.is_empty():
+		var node: Node = pending.pop_back()
+		if node is MeshInstance3D and str(node.name).to_upper().contains(token):
+			return node as MeshInstance3D
+		for child in node.get_children():
+			pending.append(child)
+	return null
+
+
+func _keep_plate(root: Node, plate: MeshInstance3D) -> void:
+	var pending: Array[Node] = [root]
+	while not pending.is_empty():
+		var node: Node = pending.pop_back()
+		if node is MeshInstance3D and node != plate:
+			node.visible = false
+		for child in node.get_children():
+			pending.append(child)
+
+
+func _cull_sign_back(plate: MeshInstance3D) -> void:
+	# The plate is two skins. Local +Z is the readable side; the other skin is mirrored.
+	var source := plate.mesh
+	if source == null:
+		return
+	var cleaned := ArrayMesh.new()
+	for surface in source.get_surface_count():
+		var tool := MeshDataTool.new()
+		if tool.create_from_surface(source, surface) != OK:
+			continue
+		var builder := SurfaceTool.new()
+		builder.begin(Mesh.PRIMITIVE_TRIANGLES)
+		var format: int = source.surface_get_format(surface)
+		var has_uv := (format & Mesh.ARRAY_FORMAT_TEX_UV) != 0
+		var has_uv2 := (format & Mesh.ARRAY_FORMAT_TEX_UV2) != 0
+		var has_tangent := (format & Mesh.ARRAY_FORMAT_TANGENT) != 0
+		var has_color := (format & Mesh.ARRAY_FORMAT_COLOR) != 0
+		for face in tool.get_face_count():
+			if tool.get_face_normal(face).z < 0.5:
+				continue
+			for corner in 3:
+				var idx := tool.get_face_vertex(face, corner)
+				builder.set_normal(tool.get_vertex_normal(idx))
+				if has_uv:
+					builder.set_uv(tool.get_vertex_uv(idx))
+				if has_uv2:
+					builder.set_uv2(tool.get_vertex_uv2(idx))
+				if has_tangent:
+					builder.set_tangent(tool.get_vertex_tangent(idx))
+				if has_color:
+					builder.set_color(tool.get_vertex_color(idx))
+				builder.add_vertex(tool.get_vertex(idx))
+		var material := plate.get_active_material(surface)
+		if material is BaseMaterial3D:
+			var front := material.duplicate() as BaseMaterial3D
+			front.cull_mode = BaseMaterial3D.CULL_BACK
+			builder.set_material(front)
+		elif material != null:
+			builder.set_material(material)
+		builder.commit(cleaned)
+	plate.mesh = cleaned
 
 
 func _sink_bank(edge: String, x0: float, x1: float, z0: float, z1: float) -> void:
