@@ -19,6 +19,7 @@ const CUBICLE := preload("res://models/office/cubicle.glb")
 const COLUMN := preload("res://models/office/column.glb")
 const TABLE := preload("res://models/office/table.glb")
 const BK_OFFICE_CHAIR := preload("res://models/blendkit/office_chair.glb")
+const BK_SWIVEL := preload("res://models/blendkit/swivel_chair.glb")
 const BK_WOOD_CHAIR := preload("res://models/blendkit/wooden_chair.glb")
 const BK_FOLD_CHAIR := preload("res://models/blendkit/folding_chair.glb")
 const BK_TABLE := preload("res://models/blendkit/conference.glb")
@@ -1575,6 +1576,21 @@ func _mesh_world_aabb(mesh_node: MeshInstance3D) -> AABB:
 	return merged
 
 
+func _swivel_chair(parent: Node3D, at: Vector3, yaw: float) -> void:
+	var world_at := at
+	var world_yaw := yaw
+	if parent != _geometry and parent.is_inside_tree():
+		world_at = parent.to_global(at)
+		world_yaw += parent.global_rotation.y
+	# The source model is 0.72 m tall, with the seat near 0.45 m. These desks
+	# are 0.84 m, so the chair is scaled until the backrest clears the top.
+	var scale := 1.0 / 0.716
+	if _chair_hits_wall(world_at, world_yaw, 0.30 * scale, 0.28 * scale, 0.26 * scale):
+		return
+	var node := _bk(BK_SWIVEL, parent, at, yaw, 1.0)
+	node.add_to_group("overlap_movable")
+
+
 func _office_chair(parent: Node3D, at: Vector3, yaw: float) -> void:
 	var world_at := at
 	var world_yaw := yaw
@@ -2049,7 +2065,9 @@ func _cubicle(at: Vector3, yaw: float = 0.0) -> void:
 	_crt(node, Vector3(0.0, 0.84, 0.46), 0.0)
 	_keyboard(node, Vector3(0.02, 0.84, 0.7))
 	_maybe_pencil(node, Vector3(0.48, 0.84, 0.38))
-	_office_chair(node, Vector3(0.1, 0.0, 1.18), PI)
+	# The task chair's origin is the middle of the base. Yaw PI points the seat at the desk.
+	# Pulled forward of the 0.84 m top so the larger seat stays clear of it.
+	_swivel_chair(node, Vector3(0.0, 0.0, 1.42), PI)
 
 
 func _prop(packed: PackedScene, at: Vector3) -> Node3D:
