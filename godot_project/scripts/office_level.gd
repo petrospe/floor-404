@@ -56,7 +56,7 @@ const BK_BATHROOM_SIGN := preload("res://models/blendkit/bathroom_sign.glb")
 const TILE_TEX := preload("res://models/blendkit/white_tiles.jpg")
 const ALARM_BEACON := preload("res://scripts/alarm_beacon.gd")
 const ELEVATOR_DOORS := preload("res://scripts/elevator_doors.gd")
-const ELEVATOR_PANEL := preload("res://scripts/elevator_panel.gd")
+const CABIN := preload("res://scripts/elevator_cabin.gd")
 const FLOOR_PANEL := preload("res://scripts/electrical_panel.gd")
 const CABINET_LINK := preload("res://scripts/cabinet_panel_link.gd")
 const FLOOR_EXIT := preload("res://scripts/floor_exit.gd")
@@ -1080,10 +1080,8 @@ func _build_elevators() -> void:
 	second.set_car_here(not at_first)
 	var marker_a := _elevator_marker("RideA", Vector3(26.5, 0.05, 10.0), PI * 0.5)
 	var marker_b := _elevator_marker("RideB", Vector3(-22.5, 0.05, 202.0), -PI * 0.5)
-	_dress_car(Vector3(26.0, 0.0, 10.0), true)
-	_dress_car(Vector3(-22.0, 0.0, 202.0), false)
-	var panel_a = _elevator_panel(Vector3(27.67, 1.25, 10.35), -1.0, 3, "F04_DOWN")
-	var panel_b = _elevator_panel(Vector3(-23.67, 1.25, 202.35), 1.0, 5, "F04_UP")
+	var panel_a = CABIN.install(_geometry, Vector3(26.0, 0.0, 10.0), Vector3(-1.0, 0.0, 0.0), 3, "F04_DOWN")
+	var panel_b = CABIN.install(_geometry, Vector3(-22.0, 0.0, 202.0), Vector3(1.0, 0.0, 0.0), 5, "F04_UP")
 	panel_a.partner_marker = marker_b
 	panel_a.partner_doors = second
 	panel_a.home_doors = first
@@ -1099,39 +1097,6 @@ func _elevator_marker(label: String, at: Vector3, yaw: float) -> Node3D:
 	marker.rotation.y = yaw
 	_geometry.add_child(marker)
 	return marker
-
-
-func _elevator_panel(at: Vector3, face: float, lit_floor: int, elevator_id: String = ""):
-	var panel = ELEVATOR_PANEL.new()
-	panel.position = at
-	var steel := _mat(Color(0.62, 0.63, 0.66), 0.35, 0.7)
-	var button := _mat(Color(0.16, 0.16, 0.17), 0.4, 0.35)
-	var lit := _mat(Color(0.35, 0.06, 0.05), 0.35, 0.1, Color(0.85, 0.08, 0.05), 1.4)
-	_part(panel, Vector3(0.0, 0.0, 0.0), Vector3(0.04, 0.58, 0.26), steel)
-	var shape := CollisionShape3D.new()
-	var collision := BoxShape3D.new()
-	collision.size = Vector3(0.06, 0.62, 0.3)
-	shape.shape = collision
-	panel.add_child(shape)
-	for index in range(15):
-		var column := index % 3
-		var row := 4 - int(index / 3.0)
-		var floor_number := 15 - index
-		var local := Vector3(face * 0.03, -0.2 + float(row) * 0.09, -0.07 + float(column) * 0.07)
-		_part(panel, local, Vector3(0.018, 0.045, 0.045), lit if floor_number == lit_floor else button)
-		var label := Label3D.new()
-		label.text = str(floor_number)
-		label.position = local + Vector3(face * 0.012, 0.0, 0.0)
-		label.rotation.y = face * PI * 0.5
-		label.pixel_size = 0.0012
-		label.font_size = 28
-		label.modulate = Color(0.92, 0.93, 0.9)
-		label.outline_size = 0
-		panel.add_child(label)
-	_geometry.add_child(panel)
-	if elevator_id != "":
-		panel.configure(elevator_id, lit)
-	return panel
 
 
 func _progression_hooks() -> void:
@@ -1159,24 +1124,6 @@ func _floor_panel(panel_id: String, at: Vector3, yaw: float, plate: bool) -> voi
 	panel.position = at
 	panel.rotation.y = yaw
 	_geometry.add_child(panel)
-
-
-func _dress_car(center: Vector3, door_on_west: bool) -> void:
-	var wood := _mat(Color(0.66, 0.54, 0.38), 0.58)
-	var tile := _mat(Color(0.82, 0.82, 0.8), 0.35, 0.08)
-	_decor("CarFloor", center + Vector3(0.0, 0.02, 0.0), Vector3(3.5, 0.04, 3.5), tile)
-	_decor("CarSide", center + Vector3(0.0, 1.2, 1.72), Vector3(3.2, 2.35, 0.06), wood)
-	_decor("CarSide", center + Vector3(0.0, 1.2, -1.72), Vector3(3.2, 2.35, 0.06), wood)
-	var back := 1.72 if door_on_west else -1.72
-	_decor("CarBack", center + Vector3(back, 1.2, 0.0), Vector3(0.06, 2.35, 3.2), wood)
-	var lamp := OmniLight3D.new()
-	lamp.position = center + Vector3(0.0, 3.2, 0.0)
-	lamp.light_color = Color(0.95, 0.94, 0.88)
-	lamp.light_energy = 1.6
-	lamp.omni_range = 5.0
-	lamp.shadow_enabled = false
-	_geometry.add_child(lamp)
-	_decor("CarLamp", lamp.position, Vector3(0.9, 0.04, 0.28), _mat(Color(0.9, 0.9, 0.86), 0.4, 0.0, Color(0.95, 0.93, 0.85), 3.0))
 
 
 func _place_node(node: Node3D, cell: Vector2i, edge: String) -> void:

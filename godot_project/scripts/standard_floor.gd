@@ -12,6 +12,7 @@ const WALL := preload("res://scenes/modular/wall_4x3.tscn")
 const WINDOW := preload("res://scenes/modular/window_wall.tscn")
 const DOOR := preload("res://scenes/modular/door_frame.tscn")
 const PLAYER := preload("res://scenes/player.tscn")
+const CABIN := preload("res://scripts/elevator_cabin.gd")
 const PANEL := preload("res://scripts/electrical_panel.gd")
 const EXIT := preload("res://scripts/locked_exit.gd")
 const TABLE := preload("res://models/blendkit/conference.glb")
@@ -51,14 +52,10 @@ func _spec(id: String) -> Dictionary:
 				"0,3,w": "exit",
 				"3,2,e": "window",
 			},
-			"down_id": "F03_DOWN",
-			"down_caption": "2",
-			"down_at": Vector3(6.0, 1.25, 0.4),
-			"down_yaw": PI,
-			"up_id": "F03_UP",
-			"up_caption": "4",
-			"up_at": Vector3(6.0, 1.25, 23.6),
-			"up_yaw": 0.0,
+			"cars": [
+				{"x": 1, "z": 0, "edge": "n", "id": "F03_DOWN", "lit": 2},
+				{"x": 1, "z": 5, "edge": "s", "id": "F03_UP", "lit": 4},
+			],
 			"panels": [
 				{"id": "F03_UP_PANEL", "at": Vector3(11.6, 1.35, 18.0), "yaw": PI * 0.5},
 				{"id": "F03_DOWN_PANEL", "at": Vector3(0.4, 1.35, 6.0), "yaw": -PI * 0.5},
@@ -94,14 +91,10 @@ func _spec(id: String) -> Dictionary:
 			"0,3,w": "window",
 			"0,4,w": "window",
 		},
-		"down_id": "F05_DOWN",
-		"down_caption": "4",
-		"down_at": Vector3(10.0, 1.25, 0.4),
-		"down_yaw": PI,
-		"up_id": "F05_UP",
-		"up_caption": "6",
-		"up_at": Vector3(10.0, 1.25, 31.6),
-		"up_yaw": 0.0,
+		"cars": [
+			{"x": 2, "z": 0, "edge": "n", "id": "F05_DOWN", "lit": 4},
+			{"x": 2, "z": 7, "edge": "s", "id": "F05_UP", "lit": 6},
+		],
 		"panels": [
 			{"id": "F05_DOWN_PANEL", "at": Vector3(4.4, 1.35, 6.0), "yaw": -PI * 0.5},
 			{"id": "F05_UP_PANEL", "at": Vector3(15.6, 1.35, 26.0), "yaw": PI * 0.5},
@@ -143,8 +136,9 @@ func _build(spec: Dictionary) -> void:
 					_shaft(cell, edge, str(spec["code"]))
 				"exit":
 					_exit(cell, edge)
-	_call_plate(spec["down_at"], float(spec["down_yaw"]), str(spec["down_id"]), str(spec["down_caption"]))
-	_call_plate(spec["up_at"], float(spec["up_yaw"]), str(spec["up_id"]), str(spec["up_caption"]))
+	for item in spec["cars"]:
+		var car: Dictionary = item
+		_finish_car(Vector2i(int(car["x"]), int(car["z"])), str(car["edge"]), str(car["id"]), int(car["lit"]))
 	for item in spec["panels"]:
 		var info: Dictionary = item
 		var panel := PANEL.new()
@@ -201,34 +195,10 @@ func _shaft(cell: Vector2i, edge: String, code: String) -> void:
 	doors.set_car_here(true)
 
 
-func _call_plate(at: Vector3, yaw: float, elevator_id: String, caption: String) -> void:
-	var plate := ElevatorPanel.new()
-	plate.position = at
-	plate.rotation.y = yaw
-	var steel := StandardMaterial3D.new()
-	steel.albedo_color = Color(0.62, 0.63, 0.66)
-	steel.roughness = 0.35
-	steel.metallic = 0.7
-	var lamp := StandardMaterial3D.new()
-	lamp.emission_enabled = true
-	_mesh(plate, Vector3(0.0, 0.0, -0.02), Vector3(0.28, 0.42, 0.04), steel)
-	_mesh(plate, Vector3(0.0, 0.04, -0.045), Vector3(0.12, 0.12, 0.015), lamp)
-	var label := Label3D.new()
-	label.text = caption
-	label.position = Vector3(0.0, -0.08, -0.05)
-	label.pixel_size = 0.002
-	label.font_size = 48
-	label.modulate = Color(0.92, 0.93, 0.9)
-	label.outline_size = 0
-	plate.add_child(label)
-	var shape := CollisionShape3D.new()
-	var box := BoxShape3D.new()
-	box.size = Vector3(0.32, 0.5, 0.08)
-	shape.shape = box
-	shape.position = Vector3(0.0, 0.0, -0.03)
-	plate.add_child(shape)
-	add_child(plate)
-	plate.configure(elevator_id, lamp)
+func _finish_car(cell: Vector2i, edge: String, elevator_id: String, lit_floor: int) -> void:
+	var center := Vector3(float(cell.x) * CELL + 2.0, 0.0, float(cell.y) * CELL + 2.0)
+	var door_dir := Vector3(_delta(edge).x, 0.0, _delta(edge).y)
+	CABIN.install(self, center, door_dir, lit_floor, elevator_id)
 
 
 func _exit(cell: Vector2i, edge: String) -> void:
@@ -327,16 +297,6 @@ func _yaw_into(edge: String) -> float:
 			return PI * 0.5
 		_:
 			return -PI * 0.5
-
-
-func _mesh(parent: Node3D, at: Vector3, size: Vector3, material: Material) -> void:
-	var mesh := MeshInstance3D.new()
-	var box := BoxMesh.new()
-	box.size = size
-	mesh.mesh = box
-	mesh.position = at
-	mesh.material_override = material
-	parent.add_child(mesh)
 
 
 func _canon_key(cell: Vector2i, edge: String) -> String:
