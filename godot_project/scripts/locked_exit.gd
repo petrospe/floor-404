@@ -18,7 +18,8 @@ func _ready() -> void:
 	add_child(mesh)
 	var sign := Label3D.new()
 	sign.text = "EXIT"
-	sign.position = Vector3(0.0, 1.55, -0.05)
+	# Label3D reads from its +Z face. That face points into the room.
+	sign.position = Vector3(0.0, 1.55, 0.05)
 	sign.pixel_size = 0.004
 	sign.font_size = 72
 	sign.modulate = Color(1.0, 0.86, 0.82)

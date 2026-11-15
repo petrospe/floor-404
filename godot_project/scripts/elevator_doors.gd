@@ -206,6 +206,9 @@ func _occupied() -> bool:
 
 
 func _park_random() -> void:
+	# A lone shaft is this floor's own elevator. Only the old paired cabins leave.
+	if other_doors == null:
+		return
 	var stay := randi() % 2 == 0
 	set_car_here(stay)
 	if other_doors != null:
