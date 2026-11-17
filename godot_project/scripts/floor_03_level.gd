@@ -41,9 +41,16 @@ const BOOKS := preload("res://models/blendkit/books.glb")
 const FOLDER := preload("res://models/blendkit/folder.glb")
 const BOARD := preload("res://models/blendkit/whiteboard.glb")
 const TV := preload("res://models/blendkit/wall_tv.glb")
+const PENCIL := preload("res://models/blendkit/pencil_cup.glb")
+const CAM_MODEL := preload("res://models/blendkit/camera.glb")
+const GLASS := preload("res://models/blendkit/glass_board.glb")
+const NOTES := preload("res://models/blendkit/sticky_notes.glb")
 const TOILET_MODEL := preload("res://models/blendkit/toilet.glb")
 const SINK := preload("res://models/blendkit/sink.glb")
 const MIRROR := preload("res://models/blendkit/mirror.glb")
+const BATHROOM_SIGN := preload("res://models/blendkit/bathroom_sign.glb")
+const TILE_TEX := preload("res://models/blendkit/white_tiles.jpg")
+const DOOR_SCRIPT := preload("res://scripts/door.gd")
 const CONTROL_PANEL := preload("res://models/blendkit/electrical_control_panel.glb")
 const WALL_PANEL := preload("res://models/blendkit/electrical_wall_panel.glb")
 const EXIT := preload("res://scripts/locked_exit.gd")
@@ -58,9 +65,23 @@ var _overrides: Dictionary = {}
 var _campus: Dictionary = {}
 var _flicker_lights: Array[OmniLight3D] = []
 var _flicker_energy: Array[float] = []
+var _asset_counts: Dictionary = {}
+var _density_counts: Array[int] = [0, 0, 0, 0, 0]
+var _rank: Dictionary = {}
+var _multi_work := 0
 var _wall_paint: StandardMaterial3D
 var _grown := 0
 var _report: PackedStringArray = PackedStringArray()
+var _cab_body: StandardMaterial3D
+var _cab_drawer: StandardMaterial3D
+var _cab_pull: StandardMaterial3D
+var _exit_red: StandardMaterial3D
+var _exit_frame: StandardMaterial3D
+var _exit_metal: StandardMaterial3D
+var _stall_white: StandardMaterial3D
+var _tile_floor: StandardMaterial3D
+var _tile_ns: StandardMaterial3D
+var _tile_ew: StandardMaterial3D
 
 
 func _ready() -> void:
@@ -75,6 +96,7 @@ func _ready() -> void:
 	_repair_graph()
 	_assign_remaining()
 	_place_openings()
+	_extra_doors()
 	_build_shell()
 	_furnish()
 	_spawn_player()
@@ -634,6 +656,7 @@ func _edge_kind(cell: Vector2i, edge: String) -> String:
 
 
 func _furnish() -> void:
+	_assign_ranks()
 	var done: Dictionary = {}
 	for key in _cells.keys():
 		var id := str(_cells[key])
@@ -641,6 +664,8 @@ func _furnish() -> void:
 			continue
 		done[id] = true
 		var kind := str(_kind.get(id, ""))
+		if _rank.has(id):
+			_density_counts[int(_rank[id])] += 1
 		match kind:
 			"office", "small":
 				_furnish_office(id, kind == "small")
@@ -666,6 +691,7 @@ func _furnish() -> void:
 			"hall":
 				_furnish_hall()
 	_exit_count_note()
+	_report_assets()
 
 
 func _furnish_office(id: String, _small: bool) -> void:
@@ -722,6 +748,9 @@ func _furnish_office(id: String, _small: bool) -> void:
 		_on_desk(KEYBOARD, desk_node, local_aim * 0.2, face)
 		var screen := _on_desk(CRT, desk_node, -local_aim * 0.06, face)
 		screen.name = "DeskScreen"
+	if manager_node != null and desk_node != null:
+		_multi_work += 1
+	_dress_work(id, blockers)
 
 
 func _furnish_meeting(id: String) -> void:
@@ -739,9 +768,10 @@ func _furnish_meeting(id: String) -> void:
 	_seat(table, -_side(far), WOOD, id, door_cell, door_edge, blockers, false)
 	var screen := _on_desk(CRT, table, Vector3(0.05, 0.0, -0.04), _face_into(far))
 	screen.name = "DeskScreen"
-	var cell: Vector2i = _far_cell(id, far)
-	# Centered over the table, bottom just above the top, back flush on the wall.
-	_mount_on_wall(BOARD if _roll(_id_num(id), 5) % 2 == 0 else TV, _inner(cell, far, 2.0, 0.0), _face_into(far), 1.42)
+	var hung: PackedScene = BOARD if _roll(_id_num(id), 5) % 2 == 0 else TV
+	if _hang_on_real_wall(id, hung, far, 1.78):
+		_tag_last(hung)
+	_dress_meeting(id, blockers, far)
 
 
 func _furnish_break(id: String) -> void:
@@ -804,31 +834,45 @@ func _furnish_break(id: String) -> void:
 	_settle_against(bin, bin_cell, bin_edge, 0.55, 0.08)
 	if _hits_nodes(bin, blockers) or _hits_door(bin, door_cell, door_edge):
 		bin.position += _side(bin_edge) * 2.5
+	blockers.append(bin)
+	_dress_break(id, blockers)
 
 
 func _furnish_storage(id: String) -> void:
 	var info := _door_info(id)
 	var far := _opposite(str(info["edge"]))
 	var cell: Vector2i = _far_cell(id, far)
+	var blockers: Array[Node3D] = []
 	if _is_wall_edge(cell, far):
-		_prop(SHELF, _inner(cell, far, 1.2, 0.4), _face_into(far), 2.0, 1.1)
-		_prop(SHELF, _inner(cell, far, 2.8, 0.4), _face_into(far), 2.0, 1.1)
+		blockers.append(_prop(SHELF, _inner(cell, far, 1.2, 0.4), _face_into(far), 2.0, 1.1))
+		blockers.append(_prop(SHELF, _inner(cell, far, 2.8, 0.4), _face_into(far), 2.0, 1.1))
 	var side := _side_edge(far)
-	_prop(CABINET, _inner(cell, side, 2.2, 0.45), _face_into(side), 1.3, 0.65)
-	if _roll(_id_num(id), 2) % 2 == 0:
-		_prop(COPIER, _centroid(id) + _into(far) * 0.4, _face_into(far), 1.15, 0.85)
+	if _is_wall_edge(cell, side) and not _is_door_edge(cell, side):
+		blockers.append(_prop(CABINET, _inner(cell, side, 2.2, 0.45), _face_into(side), 1.3, 0.65))
+	var extra := _prop(COPIER, _centroid(id) + _into(far) * 0.4, _face_into(far), 1.15, 0.85) if _roll(_id_num(id), 2) % 2 == 0 else _prop(LADDER, _centroid(id), 0.4, 2.1, 0.65)
+	if _off_doors(extra, id, blockers):
+		blockers.append(extra)
 	else:
-		_prop(LADDER, _centroid(id), 0.4, 2.1, 0.65)
+		_forget(extra)
+	_dress_storage(id, blockers)
 
 
 func _furnish_utility(id: String) -> void:
 	var info := _door_info(id)
 	var far := _opposite(str(info["edge"]))
 	var cell: Vector2i = _far_cell(id, far)
-	_prop(SHELF, _inner(cell, far, 2.0, 0.4), _face_into(far), 2.0, 1.1)
-	_prop(LADDER, _inner(cell, _side_edge(far), 2.4, 0.45), 0.6, 2.1, 0.65)
-	_prop(EXTINGUISHER, _inner(cell, _opposite(_side_edge(far)), 1.5, 0.3), 0.2, 0.7, 0.35)
-	_prop(CABINET, _centroid(id), _face_into(far), 1.3, 0.65)
+	var blockers: Array[Node3D] = []
+	blockers.append(_prop(SHELF, _inner(cell, far, 2.0, 0.4), _face_into(far), 2.0, 1.1))
+	blockers.append(_prop(LADDER, _inner(cell, _side_edge(far), 2.4, 0.45), 0.6, 2.1, 0.65))
+	blockers.append(_prop(EXTINGUISHER, _inner(cell, _opposite(_side_edge(far)), 1.5, 0.3), 0.2, 0.7, 0.35))
+	var cabinet := _try_wall(CABINET, id, blockers)
+	if cabinet == null:
+		cabinet = _prop(CABINET, _inner(cell, far, 0.7, 0.45), _face_into(far), 1.3, 0.65)
+		if _off_doors(cabinet, id, blockers):
+			blockers.append(cabinet)
+		else:
+			_forget(cabinet)
+	_dress_utility(id, blockers)
 
 
 func _furnish_panel(id: String) -> void:
@@ -856,6 +900,7 @@ func _furnish_open(id: String) -> void:
 	var door_cell: Vector2i = info["cell"]
 	var door_edge := str(info["edge"])
 	var n := 0
+	var blockers: Array[Node3D] = []
 	for cell in _room_cells(id):
 		if cell == door_cell:
 			continue
@@ -863,7 +908,7 @@ func _furnish_open(id: String) -> void:
 		var desk := _raw(TABLE, _face_into(edge))
 		desk.name = "ComputerDesk"
 		_settle_against(desk, cell, edge, 2.0, 0.16)
-		var blockers: Array[Node3D] = [desk]
+		blockers.append(desk)
 		var sitter := _seat(desk, _into(edge), CHAIR if n % 2 == 0 else SWIVEL, id, door_cell, door_edge, blockers, true)
 		var aim := _into(edge)
 		if sitter != null:
@@ -872,16 +917,43 @@ func _furnish_open(id: String) -> void:
 		var screen := _on_desk(CRT, desk, Vector3.ZERO, _yaw_facing(aim))
 		screen.name = "DeskScreen"
 		n += 1
+	if n >= 2:
+		_multi_work += 1
+	_dress_work(id, blockers)
 
 
 func _furnish_server(id: String) -> void:
 	var info := _door_info(id)
-	var far := _opposite(str(info["edge"]))
+	var door_cell: Vector2i = info["cell"]
+	var door_edge := str(info["edge"])
+	var blockers: Array[Node3D] = []
+	var min_x := 999
+	var max_x := -999
+	var min_z := 999
+	var max_z := -999
 	for cell in _room_cells(id):
-		if not _is_wall_edge(cell, far):
-			continue
-		var at := _inner(cell, far, 2.0, 0.35)
-		_prop(RACK, at, _face_into(far), 2.15, 2.2)
+		min_x = mini(min_x, cell.x)
+		max_x = maxi(max_x, cell.x)
+		min_z = mini(min_z, cell.y)
+		max_z = maxi(max_z, cell.y)
+	var origin := Vector3(float(min_x) * CELL, 0.0, float(min_z) * CELL)
+	var span_x := float(max_x - min_x + 1) * CELL
+	var span_z := float(max_z - min_z + 1) * CELL
+	var row := 0
+	var x := 1.7
+	while x < span_x - 0.7:
+		var z := 1.35
+		var yaw := PI * 0.5 if row % 2 == 0 else -PI * 0.5
+		while z < span_z - 0.9:
+			var rack := _raw(RACK, yaw)
+			_center_mesh(rack, origin + Vector3(x, 0.0, z))
+			if not _foot_in_room(rack, id) or _hits_door(rack, door_cell, door_edge) or _hits_nodes(rack, blockers):
+				_forget(rack)
+			else:
+				blockers.append(rack)
+			z += 2.45
+		x += 1.5
+		row += 1
 	var cool := OmniLight3D.new()
 	cool.position = _centroid(id) + Vector3(0, 2.3, 0)
 	cool.light_color = Color(0.45, 0.62, 0.95)
@@ -891,40 +963,776 @@ func _furnish_server(id: String) -> void:
 	add_child(cool)
 
 
-func _furnish_restroom(id: String) -> void:
-	var info := _door_info(id)
-	var far := _opposite(str(info["edge"]))
-	var cell: Vector2i = _far_cell(id, far)
-	var along := 2.0
-	var scale := 1.48
-	var gap := 0.250 * scale + 0.06
-	var toilet := TOILET_MODEL.instantiate() as Node3D
-	toilet.position = _against(cell, far, along, gap)
-	toilet.rotation.y = _face_into(far)
-	toilet.scale = Vector3(scale, scale, scale)
-	add_child(toilet)
-	_box_around(toilet)
-	var side := _side_edge(far)
-	var sink_cell: Vector2i = info["cell"]
-	var sink := SINK.instantiate() as Node3D
-	sink.position = _against(sink_cell, side, 2.6, 0.32)
-	sink.rotation.y = _face_into(side)
-	add_child(sink)
-	_box_around(sink)
-	var mirror_at := _against(sink_cell, side, 2.6, 0.0)
-	var mirror := _wall_hang(MIRROR, mirror_at, _face_into(side), 1.62, 1.35)
-	_paint_black(mirror)
-
-
 func _furnish_odd(id: String) -> void:
 	var info := _door_info(id)
-	var far := _opposite(str(info["edge"]))
-	var cell: Vector2i = info["cell"]
-	for i in 3:
-		var at := _inner(cell, far, 1.1 + float(i) * 0.9, 0.55)
-		_prop(CRT, at, _face_into(far), 0.55, 0.55)
-	_prop(CHAIR, _centroid(id) + _into(far) * 0.3, _face_into(far), 1.1, 0.7)
-	_prop(TREE, _inner(cell, _side_edge(far), 1.0, 0.5), 0.2, 2.2, 0.8)
+	var door_edge := str(info["edge"])
+	var door_cell: Vector2i = info["cell"]
+	var blockers: Array[Node3D] = []
+	var placed := 0
+	var walls: Array[String] = [_opposite(door_edge), _side_edge(door_edge), _opposite(_side_edge(door_edge))]
+	for edge in walls:
+		if placed >= 3:
+			break
+		for cell in _room_cells(id):
+			if placed >= 3:
+				break
+			if not _is_wall_edge(cell, edge) or _is_door_edge(cell, edge):
+				continue
+			var desk := _raw(TABLE, _face_into(edge))
+			desk.name = "ComputerDesk"
+			_settle_against(desk, cell, edge, 2.0, 0.12)
+			_nudge_off_door(desk, edge, door_cell, door_edge)
+			if not _foot_in_room(desk, id) or _hits_door(desk, door_cell, door_edge) or _tight_hit(desk, blockers):
+				_forget(desk)
+				continue
+			blockers.append(desk)
+			var sitter := _seat(desk, _into(edge), SWIVEL, id, door_cell, door_edge, blockers, false)
+			var aim := _into(edge)
+			if sitter != null:
+				aim = sitter.global_position - desk.global_position
+				aim.y = 0.0
+			var screen := _on_desk(CRT, desk, Vector3.ZERO, _yaw_facing(aim))
+			screen.name = "DeskScreen"
+			_on_desk(KEYBOARD, desk, Vector3(0.16, 0.0, 0.1), _yaw_facing(aim))
+			placed += 1
+	if placed >= 2:
+		_multi_work += 1
+	if OS.get_environment("F03_AUDIT") == "1":
+		print("odd desks ", placed, " at ", _centroid(id))
+	_try_wall(PLANT, id, blockers)
+
+
+func _furnish_restroom(id: String) -> void:
+	_tile_restroom(id)
+	var toilets_run := _longest_run(id, "")
+	var toilet_edge := str(toilets_run["edge"])
+	if toilet_edge == "":
+		return
+	var toilet_cells: Array[Vector2i] = []
+	toilet_cells.assign(toilets_run["cells"])
+	var spots := _fixture_row(toilet_cells, 1.38, 0.32)
+	var occupied := _place_toilets(id, toilet_edge, spots)
+	var toilet_count := occupied.size()
+	var sink_count := 0
+	for edge in EDGES:
+		if edge == toilet_edge:
+			continue
+		for run in _wall_runs(id, edge):
+			var sink_cells: Array[Vector2i] = []
+			sink_cells.assign(run)
+			var sink_spots := _fixture_row(sink_cells, 1.6, 0.34)
+			sink_count += _place_sinks(id, edge, sink_spots, occupied)
+	if OS.get_environment("F03_AUDIT") == "1":
+		print("restroom toilets ", toilet_count, " sinks ", sink_count, " edge ", toilet_edge, " run ", toilet_cells.size())
+	for door in _room_doors(id):
+		_wc_signs(door["cell"], str(door["edge"]))
+
+
+func _longest_run(id: String, skip: String) -> Dictionary:
+	var best_edge := ""
+	var best: Array[Vector2i] = []
+	for edge in EDGES:
+		if edge == skip:
+			continue
+		for run in _wall_runs(id, edge):
+			if run.size() > best.size():
+				best = run
+				best_edge = edge
+	return {"edge": best_edge, "cells": best}
+
+
+func _clear_of_doors(id: String, at: Vector3, radius: float) -> bool:
+	for door in _room_doors(id):
+		var door_at := _inner(door["cell"], str(door["edge"]), 2.0, 0.0)
+		if Vector2(at.x, at.z).distance_to(Vector2(door_at.x, door_at.z)) < radius:
+			return false
+	return true
+
+
+func _wall_cells(id: String, edge: String) -> Array[Vector2i]:
+	var cells: Array[Vector2i] = []
+	for cell in _room_cells(id):
+		if _is_wall_edge(cell, edge) and not _is_door_edge(cell, edge):
+			cells.append(cell)
+	var side := _side(edge)
+	cells.sort_custom(func(a: Vector2i, b: Vector2i) -> bool:
+		var pa := Vector3(float(a.x) * CELL, 0.0, float(a.y) * CELL)
+		var pb := Vector3(float(b.x) * CELL, 0.0, float(b.y) * CELL)
+		return pa.dot(side) < pb.dot(side)
+	)
+	return cells
+
+
+func _wall_runs(id: String, edge: String) -> Array:
+	var cells := _wall_cells(id, edge)
+	var runs: Array = []
+	var current: Array[Vector2i] = []
+	for cell in cells:
+		if current.is_empty() or _run_continues(current[current.size() - 1], cell, edge):
+			current.append(cell)
+		else:
+			runs.append(current.duplicate())
+			current = [cell]
+	if not current.is_empty():
+		runs.append(current)
+	return runs
+
+
+func _run_continues(a: Vector2i, b: Vector2i, edge: String) -> bool:
+	if edge == "n" or edge == "s":
+		return a.y == b.y and absi(a.x - b.x) == 1
+	return a.x == b.x and absi(a.y - b.y) == 1
+
+
+func _fixture_row(cells: Array[Vector2i], pitch: float, margin: float) -> Array[Dictionary]:
+	var spots: Array[Dictionary] = []
+	if cells.is_empty():
+		return spots
+	var length := float(cells.size()) * CELL
+	var usable := length - margin * 2.0
+	if usable < pitch * 0.8:
+		return spots
+	var count := maxi(int(usable / pitch), 1)
+	var step := usable / float(count)
+	for i in count:
+		var dist := margin + (float(i) + 0.5) * step
+		var index := mini(int(dist / CELL), cells.size() - 1)
+		spots.append({"cell": cells[index], "along": dist - float(index) * CELL})
+	return spots
+
+
+func _place_toilets(id: String, edge: String, spots: Array[Dictionary]) -> Array[Node3D]:
+	var scale := 1.48
+	var gap := 0.250 * scale + 0.06
+	var door_cell: Vector2i = _door_info(id)["cell"]
+	var door_edge := str(_door_info(id)["edge"])
+	var kept: Array[Node3D] = []
+	for spot in spots:
+		var cell: Vector2i = spot["cell"]
+		var toilet := TOILET_MODEL.instantiate() as Node3D
+		toilet.position = _against(cell, edge, float(spot["along"]), gap)
+		toilet.rotation.y = _face_into(edge)
+		toilet.scale = Vector3(scale, scale, scale)
+		add_child(toilet)
+		_tag(toilet, TOILET_MODEL)
+		_box_around(toilet)
+		if not _foot_in_room(toilet, id) or _hits_door(toilet, door_cell, door_edge) or not _clear_of_doors(id, toilet.global_position, 1.45):
+			_forget(toilet)
+			continue
+		kept.append(toilet)
+	if kept.size() >= 2:
+		_stalls(edge, kept, gap)
+	return kept
+
+
+func _stalls(edge: String, toilets: Array[Node3D], gap: float) -> void:
+	_ensure_stall_material()
+	var into := _into(edge)
+	var side := _side(edge)
+	var ordered: Array[Node3D] = []
+	ordered.assign(toilets)
+	ordered.sort_custom(func(a: Node3D, b: Node3D) -> bool:
+		return a.global_position.dot(side) < b.global_position.dot(side)
+	)
+	var pitch := 1.3
+	if ordered.size() >= 2:
+		pitch = absf((ordered[1].global_position - ordered[0].global_position).dot(side))
+	var half := pitch * 0.5
+	var depth := 1.42
+	var thick := 0.04
+	for i in ordered.size() + 1:
+		var base: Node3D = ordered[mini(i, ordered.size() - 1)]
+		var shift := half if i == ordered.size() else -half
+		var at := base.global_position - into * gap + into * (depth * 0.5) + side * shift
+		at.y = 0.95
+		var size := Vector3(thick, 1.9, depth)
+		if absf(into.x) > 0.5:
+			size = Vector3(depth, 1.9, thick)
+		_world_box(at, size, _stall_white)
+	var width := maxf(pitch - 0.1, 0.7)
+	var yaw := _face_into(edge)
+	var hinge_side := Basis(Vector3.UP, yaw).x
+	for toilet in ordered:
+		var hinge := toilet.global_position - into * gap + into * depth - hinge_side * (width * 0.5)
+		hinge.y = 0.0
+		_stall_door(hinge, yaw, width)
+
+
+func _stall_door(at: Vector3, yaw: float, width: float) -> void:
+	_ensure_stall_material()
+	var body := AnimatableBody3D.new()
+	body.name = "StallDoor"
+	body.position = at
+	body.rotation.y = yaw
+	body.sync_to_physics = true
+	body.set_script(DOOR_SCRIPT)
+	body.set("open_angle_degrees", -85.0)
+	body.set("duration", 0.4)
+	add_child(body)
+	var height := 1.8
+	var mesh_node := MeshInstance3D.new()
+	var box := BoxMesh.new()
+	box.size = Vector3(width, height, 0.04)
+	mesh_node.mesh = box
+	mesh_node.position = Vector3(width * 0.5, 0.12 + height * 0.5, 0.0)
+	mesh_node.material_override = _stall_white
+	body.add_child(mesh_node)
+	var shape := CollisionShape3D.new()
+	var collision := BoxShape3D.new()
+	collision.size = box.size
+	shape.shape = collision
+	shape.position = mesh_node.position
+	body.add_child(shape)
+
+
+func _place_sinks(id: String, edge: String, spots: Array[Dictionary], occupied: Array[Node3D]) -> int:
+	var door_cell: Vector2i = _door_info(id)["cell"]
+	var door_edge := str(_door_info(id)["edge"])
+	var added := 0
+	for spot in spots:
+		var cell: Vector2i = spot["cell"]
+		var along := float(spot["along"])
+		var sink := SINK.instantiate() as Node3D
+		sink.position = _against(cell, edge, along, 0.30)
+		sink.rotation.y = _face_into(edge)
+		add_child(sink)
+		_tag(sink, SINK)
+		_box_around(sink)
+		if not _foot_in_room(sink, id) or _hits_door(sink, door_cell, door_edge) or _hits_nodes(sink, occupied) or not _clear_of_doors(id, sink.global_position, 1.35):
+			_forget(sink)
+			continue
+		occupied.append(sink)
+		added += 1
+		var mirror := _wall_hang(MIRROR, _against(cell, edge, along, 0.0), _face_into(edge), 1.62, 1.3)
+		_tag_last(MIRROR)
+		_paint_black(mirror)
+	return added
+
+
+func _tile_restroom(id: String) -> void:
+	_ensure_tile_materials()
+	for cell in _room_cells(id):
+		var floor_tile := MeshInstance3D.new()
+		var plane := PlaneMesh.new()
+		plane.size = Vector2(4.0, 4.0)
+		floor_tile.mesh = plane
+		floor_tile.position = Vector3(cell.x * CELL + 2.0, 0.02, cell.y * CELL + 2.0)
+		floor_tile.material_override = _tile_floor
+		add_child(floor_tile)
+		for edge in EDGES:
+			if not _is_wall_edge(cell, edge) or _is_door_edge(cell, edge):
+				continue
+			var face := _inner(cell, edge, 2.0, 0.02)
+			var sheet := MeshInstance3D.new()
+			var wall_plane := PlaneMesh.new()
+			if edge == "e" or edge == "w":
+				wall_plane.size = Vector2(3.2, CELL)
+				sheet.rotation.z = PI * 0.5
+			else:
+				wall_plane.size = Vector2(CELL, 3.2)
+				sheet.rotation.x = -PI * 0.5
+			sheet.mesh = wall_plane
+			sheet.position = Vector3(face.x, 1.6, face.z)
+			sheet.material_override = _tile_ew if edge == "e" or edge == "w" else _tile_ns
+			add_child(sheet)
+
+
+func _wc_signs(cell: Vector2i, edge: String) -> void:
+	# Corridor side of the door. Local +Z of each plate points into the corridor.
+	var corridor := -_into(edge)
+	var yaw := _yaw_facing(corridor)
+	# Low along sits on the viewer's right when facing the corridor side of an east door.
+	var tokens: Array[String] = ["DEFICIENTE", "MULHER", "HOMEM"]
+	var alongs: Array[float] = [0.28, 0.72, 1.16]
+	for i in tokens.size():
+		var at := _inner(cell, edge, alongs[i], 0.0) + corridor * 0.24
+		at.y = 1.55
+		_wc_plate(at, yaw, tokens[i])
+
+
+func _wc_plate(at: Vector3, yaw: float, token: String) -> void:
+	var mount := Node3D.new()
+	mount.name = "WcSymbol"
+	mount.position = at
+	mount.rotation.y = yaw
+	add_child(mount)
+	var sign := BATHROOM_SIGN.instantiate() as Node3D
+	mount.add_child(sign)
+	var plate := _find_plate(sign, token)
+	if plate == null:
+		mount.queue_free()
+		return
+	_keep_plate(sign, plate)
+	_cull_sign_back(plate)
+	sign.rotation.x = PI * 0.5
+	sign.scale = Vector3(1.35, 1.35, 1.35)
+	sign.position = -mount.to_local(plate.global_position)
+
+
+func _find_plate(root: Node, token: String) -> MeshInstance3D:
+	var pending: Array[Node] = [root]
+	while not pending.is_empty():
+		var node: Node = pending.pop_back()
+		if node is MeshInstance3D and str(node.name).to_upper().contains(token):
+			return node as MeshInstance3D
+		for child in node.get_children():
+			pending.append(child)
+	return null
+
+
+func _keep_plate(root: Node, plate: MeshInstance3D) -> void:
+	var pending: Array[Node] = [root]
+	while not pending.is_empty():
+		var node: Node = pending.pop_back()
+		if node is MeshInstance3D and node != plate:
+			node.visible = false
+		for child in node.get_children():
+			pending.append(child)
+
+
+func _cull_sign_back(plate: MeshInstance3D) -> void:
+	var source := plate.mesh
+	if source == null:
+		return
+	var cleaned := ArrayMesh.new()
+	for surface in source.get_surface_count():
+		var tool := MeshDataTool.new()
+		if tool.create_from_surface(source, surface) != OK:
+			continue
+		var builder := SurfaceTool.new()
+		builder.begin(Mesh.PRIMITIVE_TRIANGLES)
+		var format: int = source.surface_get_format(surface)
+		var has_uv := (format & Mesh.ARRAY_FORMAT_TEX_UV) != 0
+		var has_uv2 := (format & Mesh.ARRAY_FORMAT_TEX_UV2) != 0
+		var has_tangent := (format & Mesh.ARRAY_FORMAT_TANGENT) != 0
+		var has_color := (format & Mesh.ARRAY_FORMAT_COLOR) != 0
+		for face in tool.get_face_count():
+			if tool.get_face_normal(face).z < 0.5:
+				continue
+			for corner in 3:
+				var idx := tool.get_face_vertex(face, corner)
+				builder.set_normal(tool.get_vertex_normal(idx))
+				if has_uv:
+					builder.set_uv(tool.get_vertex_uv(idx))
+				if has_uv2:
+					builder.set_uv2(tool.get_vertex_uv2(idx))
+				if has_tangent:
+					builder.set_tangent(tool.get_vertex_tangent(idx))
+				if has_color:
+					builder.set_color(tool.get_vertex_color(idx))
+				builder.add_vertex(tool.get_vertex(idx))
+		var material := plate.get_active_material(surface)
+		if material is BaseMaterial3D:
+			var front := material.duplicate() as BaseMaterial3D
+			front.cull_mode = BaseMaterial3D.CULL_BACK
+			builder.set_material(front)
+		elif material != null:
+			builder.set_material(material)
+		builder.commit(cleaned)
+	plate.mesh = cleaned
+
+
+func _ensure_stall_material() -> void:
+	if _stall_white != null:
+		return
+	_stall_white = StandardMaterial3D.new()
+	_stall_white.albedo_color = Color(0.95, 0.95, 0.94)
+	_stall_white.roughness = 0.4
+
+
+func _ensure_tile_materials() -> void:
+	if _tile_floor != null:
+		return
+	_tile_floor = _tile_material(0.40, 4.0, 4.0)
+	_tile_ns = _tile_material(0.20, CELL, 3.2)
+	_tile_ew = _tile_material(0.20, 3.2, CELL)
+
+
+func _tile_material(tile: float, span_u: float, span_v: float) -> StandardMaterial3D:
+	var mat := StandardMaterial3D.new()
+	mat.albedo_texture = TILE_TEX
+	mat.albedo_color = Color(1.0, 1.0, 1.0)
+	mat.roughness = 0.34
+	mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	mat.uv1_scale = Vector3(span_u / tile / 10.0, span_v / tile / 10.0, 1.0)
+	return mat
+
+
+func _world_box(at: Vector3, size: Vector3, material: Material) -> void:
+	var body := StaticBody3D.new()
+	body.position = at
+	add_child(body)
+	var mesh_node := MeshInstance3D.new()
+	var box := BoxMesh.new()
+	box.size = size
+	mesh_node.mesh = box
+	mesh_node.material_override = material
+	body.add_child(mesh_node)
+	var shape := CollisionShape3D.new()
+	var collision := BoxShape3D.new()
+	collision.size = size
+	shape.shape = collision
+	body.add_child(shape)
+
+
+func _assign_ranks() -> void:
+	var ids: Array[String] = []
+	var seen: Dictionary = {}
+	for key in _cells.keys():
+		var id := str(_cells[key])
+		if seen.has(id):
+			continue
+		seen[id] = true
+		var kind := str(_kind.get(id, ""))
+		if kind == "hall" or kind.ends_with("car"):
+			continue
+		ids.append(id)
+	ids.sort_custom(func(a: String, b: String) -> bool:
+		var ra := _roll(_id_num(a), 17)
+		var rb := _roll(_id_num(b), 17)
+		if ra == rb:
+			return a < b
+		return ra < rb
+	)
+	var n := ids.size()
+	var cuts: Array[int] = [
+		int(round(n * 0.10)),
+		int(round(n * 0.25)),
+		int(round(n * 0.60)),
+		int(round(n * 0.90)),
+	]
+	for i in ids.size():
+		var rank := 4
+		if i < cuts[0]:
+			rank = 0
+		elif i < cuts[1]:
+			rank = 1
+		elif i < cuts[2]:
+			rank = 2
+		elif i < cuts[3]:
+			rank = 3
+		_rank[ids[i]] = rank
+
+
+func _prop_budget(id: String) -> int:
+	var rank := int(_rank.get(id, 2))
+	var cells := _room_cells(id).size()
+	var table: Array[int] = [0, 1, 2, 3, 4]
+	var per := table[rank]
+	var extra := 0 if rank == 0 or cells < 2 else cells - 1
+	return mini(per + extra, 7)
+
+
+func _dress_work(id: String, blockers: Array[Node3D]) -> void:
+	var budget := _prop_budget(id)
+	if budget <= 0:
+		return
+	var info := _door_info(id)
+	var door_edge := str(info["edge"])
+	var door_cell: Vector2i = info["cell"]
+	var n := _id_num(id)
+	var first: PackedScene = PLANT
+	match _roll(n, 23) % 3:
+		1:
+			first = CABINET
+		2:
+			first = SHELF
+	_try_wall(first, id, blockers)
+	if budget >= 2:
+		_try_wall(BIN if first == PLANT else PLANT, id, blockers)
+	if budget >= 3:
+		_try_wall(SHELF, id, blockers)
+	if budget >= 4:
+		_try_wall(CABINET, id, blockers)
+	for item in blockers:
+		if budget < 2:
+			break
+		if str(item.name).begins_with("ComputerDesk"):
+			_beside(TOWER, item, id, blockers)
+			var paper: PackedScene = FOLDER if _roll(n, 31) % 2 == 0 else PENCIL
+			_on_desk(paper, item, Vector3(0.32, 0.0, 0.1), 0.4, 0.16, 0.22)
+			break
+	if budget >= 1:
+		for item in blockers:
+			if str(item.name).begins_with("ManagerDesk"):
+				_seat(item, item.global_transform.basis.x, WOOD, id, door_cell, door_edge, blockers, false)
+				break
+	if budget >= 4 and _roll(n, 37) % 3 == 0:
+		_mount_camera(id)
+	if budget >= 3 and _roll(n, 41) % 2 == 0:
+		_mount_note(id)
+
+
+func _dress_meeting(id: String, blockers: Array[Node3D], far: String) -> void:
+	var budget := _prop_budget(id)
+	if budget <= 0:
+		return
+	_try_wall(PLANT if _roll(_id_num(id), 19) % 2 == 0 else CABINET, id, blockers)
+	if budget >= 2:
+		_try_wall(SHELF, id, blockers)
+	if budget >= 3:
+		var side := _side_edge(far)
+		var cell := _far_cell(id, far)
+		if not _is_wall_edge(cell, side) or _is_door_edge(cell, side):
+			side = _opposite(side)
+		if _is_wall_edge(cell, side) and not _is_door_edge(cell, side):
+			var board: PackedScene = GLASS if _roll(_id_num(id), 43) % 2 == 0 else NOTES
+			_mount_on_wall(board, _inner(cell, side, 1.3, 0.0), _face_into(side), 1.55)
+			_tag_last(board)
+
+
+func _dress_break(id: String, blockers: Array[Node3D]) -> void:
+	var budget := _prop_budget(id)
+	if budget <= 0:
+		return
+	_try_wall(PLANT, id, blockers)
+	if budget >= 2:
+		_try_wall(PAPER, id, blockers)
+	if budget >= 3:
+		_try_wall(CABINET, id, blockers)
+
+
+func _dress_storage(id: String, blockers: Array[Node3D]) -> void:
+	var budget := _prop_budget(id)
+	for _i in budget:
+		_try_wall(SHELF if _i % 2 == 0 else CABINET, id, blockers)
+
+
+func _dress_utility(id: String, blockers: Array[Node3D]) -> void:
+	var budget := _prop_budget(id)
+	if budget >= 2:
+		_try_wall(BIN, id, blockers)
+	if budget >= 3:
+		_try_wall(SHELF, id, blockers)
+
+
+func _try_wall(packed: PackedScene, id: String, blockers: Array[Node3D]) -> Node3D:
+	var alongs: Array[float] = [0.7, 2.05, 3.3]
+	var shift := _roll(_id_num(id), 11) % 3
+	var doors := _room_doors(id)
+	var tried := 0
+	for cell in _room_cells(id):
+		for edge in EDGES:
+			if not _is_wall_edge(cell, edge) or _is_door_edge(cell, edge):
+				continue
+			var along: float = alongs[(tried + shift) % alongs.size()]
+			tried += 1
+			if tried > 8:
+				return null
+			var node := _raw(packed, _face_into(edge))
+			_settle_against(node, cell, edge, along, 0.12)
+			if _blocked(node, id, blockers, doors):
+				_forget(node)
+				continue
+			blockers.append(node)
+			_kept_prop(node, packed)
+			return node
+	return null
+
+
+func _beside(packed: PackedScene, desk: Node3D, id: String, blockers: Array[Node3D]) -> void:
+	var box := _world_bounds(desk)
+	var doors := _room_doors(id)
+	var dirs: Array[Vector3] = [desk.global_transform.basis.x, -desk.global_transform.basis.x]
+	for dir in dirs:
+		var flat := Vector3(dir.x, 0.0, dir.z)
+		if flat.length() < 0.01:
+			continue
+		flat = flat.normalized()
+		var reach := absf(flat.x) * box.size.x * 0.5 + absf(flat.z) * box.size.z * 0.5
+		var at := Vector3(box.get_center().x, 0.0, box.get_center().z) + flat * (reach + 0.32)
+		var node := _prop(packed, at, _yaw_facing(flat), 0.62, 0.42)
+		if _blocked(node, id, blockers, doors):
+			_forget(node)
+			continue
+		blockers.append(node)
+		return
+
+
+func _mount_camera(id: String) -> void:
+	for cell in _room_cells(id):
+		for edge in EDGES:
+			if not _is_wall_edge(cell, edge) or _is_door_edge(cell, edge):
+				continue
+			var at := _inner(cell, edge, 0.75, 0.0)
+			var root := Node3D.new()
+			root.position = Vector3(at.x, 2.35, at.z)
+			root.rotation.y = _face_into(edge)
+			add_child(root)
+			var node := CAM_MODEL.instantiate() as Node3D
+			node.rotation.x = PI * 0.5
+			root.add_child(node)
+			_tag(node, CAM_MODEL)
+			return
+
+
+func _mount_note(id: String) -> void:
+	for cell in _room_cells(id):
+		for edge in EDGES:
+			if not _is_wall_edge(cell, edge) or _is_door_edge(cell, edge):
+				continue
+			_mount_on_wall(NOTES, _inner(cell, edge, 3.1, 0.0), _face_into(edge), 1.35)
+			_tag_last(NOTES)
+			return
+
+
+func _off_doors(node: Node3D, id: String, blockers: Array[Node3D]) -> bool:
+	var doors := _room_doors(id)
+	if not _blocked(node, id, blockers, doors):
+		return true
+	var origin := node.position
+	var shifts: Array[Vector3] = [
+		Vector3(0.0, 0.0, 1.6), Vector3(0.0, 0.0, -1.6),
+		Vector3(1.6, 0.0, 0.0), Vector3(-1.6, 0.0, 0.0),
+		Vector3(0.0, 0.0, 2.4), Vector3(0.0, 0.0, -2.4),
+	]
+	for shift in shifts:
+		node.position = origin + shift
+		if not _blocked(node, id, blockers, doors):
+			return true
+	node.position = origin
+	return false
+
+
+func _blocked(node: Node3D, id: String, blockers: Array[Node3D], doors: Array[Dictionary]) -> bool:
+	if not _foot_in_room(node, id) or _hits_nodes(node, blockers) or _on_route(node, doors):
+		return true
+	for door in doors:
+		if _hits_door(node, door["cell"], str(door["edge"])):
+			return true
+	return false
+
+
+func _on_route(node: Node3D, doors: Array[Dictionary]) -> bool:
+	if doors.size() < 2:
+		return false
+	var center := _world_bounds(node).get_center()
+	var point := Vector2(center.x, center.z)
+	for i in doors.size():
+		for j in range(i + 1, doors.size()):
+			var a := _door_center(doors[i])
+			var b := _door_center(doors[j])
+			if _segment_distance(point, a, b) < 0.85:
+				return true
+	return false
+
+
+func _door_center(door: Dictionary) -> Vector2:
+	var cell: Vector2i = door["cell"]
+	var edge := str(door["edge"])
+	var at := _inner(cell, edge, 2.0, 0.0) + _into(edge) * 0.4
+	return Vector2(at.x, at.z)
+
+
+func _segment_distance(point: Vector2, a: Vector2, b: Vector2) -> float:
+	var ab := b - a
+	var denom := ab.length_squared()
+	if denom < 0.001:
+		return point.distance_to(a)
+	var t := clampf((point - a).dot(ab) / denom, 0.0, 1.0)
+	return point.distance_to(a + ab * t)
+
+
+func _room_doors(id: String) -> Array[Dictionary]:
+	var doors: Array[Dictionary] = []
+	for cell in _room_cells(id):
+		for edge in EDGES:
+			if _is_door_edge(cell, edge):
+				doors.append({"cell": cell, "edge": edge})
+	return doors
+
+
+func _is_door_edge(cell: Vector2i, edge: String) -> bool:
+	return str(_overrides.get(_canon_key(cell, edge), "")) == "door"
+
+
+func _tag(node: Node3D, packed: PackedScene) -> void:
+	var key := packed.resource_path.get_file()
+	node.set_meta("asset", key)
+	_asset_counts[key] = int(_asset_counts.get(key, 0)) + 1
+
+
+func _tag_last(packed: PackedScene) -> void:
+	_asset_counts[packed.resource_path.get_file()] = int(_asset_counts.get(packed.resource_path.get_file(), 0)) + 1
+
+
+func _forget(node: Node3D) -> void:
+	_untag_tree(node)
+	node.name = "Rejected"
+	node.queue_free()
+
+
+func _untag_tree(node: Node) -> void:
+	if node is Node3D and (node as Node3D).has_meta("asset"):
+		var key := str((node as Node3D).get_meta("asset"))
+		_asset_counts[key] = int(_asset_counts.get(key, 0)) - 1
+		(node as Node3D).remove_meta("asset")
+	for child in node.get_children():
+		_untag_tree(child)
+
+
+func _report_assets() -> void:
+	if OS.get_environment("F03_AUDIT") != "1":
+		return
+	var keys: Array = _asset_counts.keys()
+	keys.sort()
+	for key in keys:
+		print("asset ", key, " ", _asset_counts[key])
+	print("density ", _density_counts, " multi_work ", _multi_work, " door_hits ", _door_hits())
+	_print_samples()
+
+
+func _print_samples() -> void:
+	var wanted: Dictionary = {"office": true, "meeting": true, "break": true}
+	var shown: Dictionary = {}
+	for id in _rank.keys():
+		var kind := str(_kind.get(id, ""))
+		if not wanted.has(kind):
+			continue
+		var rank := int(_rank[id])
+		if kind == "office" and rank != 0 and rank != 4:
+			continue
+		var key := kind + str(rank)
+		if shown.has(key):
+			continue
+		shown[key] = true
+		var info := _door_info(id)
+		print("sample ", kind, " ", id, " rank ", rank, " at ", _centroid(id), " door ", info["cell"], " ", info["edge"])
+
+
+func _door_hits() -> int:
+	var doors := _room_doors_all()
+	var hits := 0
+	for child in get_children():
+		var node := child as Node3D
+		if node == null or str(node.name) == "Rejected" or not node.has_meta("asset"):
+			continue
+		var box := _world_bounds(node)
+		if box.size.length() < 0.001:
+			continue
+		var foot := Rect2(box.position.x, box.position.z, box.size.x, box.size.z)
+		for door in doors:
+			var zone := _door_zone(door["cell"], str(door["edge"]))
+			var overlap := foot.intersection(zone)
+			if overlap.size.x > 0.2 and overlap.size.y > 0.2:
+				hits += 1
+				print("door_hit ", node.get_meta("asset"), " node ", node.position, " box ", box, " door ", door["cell"], " ", door["edge"], " zone ", zone)
+				break
+	return hits
+
+
+func _room_doors_all() -> Array[Dictionary]:
+	var doors: Array[Dictionary] = []
+	var seen: Dictionary = {}
+	for key in _cells.keys():
+		var cell: Vector2i = key
+		for edge in EDGES:
+			var canon := _canon_key(cell, edge)
+			if seen.has(canon) or not _is_door_edge(cell, edge):
+				continue
+			seen[canon] = true
+			doors.append({"cell": cell, "edge": edge})
+	return doors
 
 
 func _furnish_hall() -> void:
@@ -1117,12 +1925,202 @@ func _outside_z(cell: Vector2i, edge: String) -> float:
 	return -0.12 if into_car else 0.12
 
 
+func _extra_doors() -> void:
+	var rooms: Dictionary = {}
+	for key in _cells.keys():
+		var id := str(_cells[key])
+		if id == "hall" or id.ends_with("car") or id.begins_with("panel"):
+			continue
+		var room_kind := str(_kind.get(id, ""))
+		if room_kind == "odd" or room_kind == "restroom":
+			continue
+		rooms[id] = true
+	for id in rooms.keys():
+		if _room_doors(id).size() != 1:
+			continue
+		var door_edge := str(_room_doors(id)[0]["edge"])
+		var far := _opposite(door_edge)
+		var picked := ""
+		var best := -1
+		for cell in _room_cells(id):
+			for edge in EDGES:
+				if _is_door_edge(cell, edge):
+					continue
+				var nxt: Vector2i = cell + _delta(edge)
+				if not _cells.has(nxt):
+					continue
+				var neighbor := str(_cells[nxt])
+				if neighbor == id or neighbor.ends_with("car") or neighbor.begins_with("panel"):
+					continue
+				var canon := _canon_key(cell, edge)
+				var current := str(_overrides.get(canon, ""))
+				if current == "elevator" or current == "exit" or current == "door":
+					continue
+				var score := 30 if neighbor == "hall" else 10
+				if edge != far and edge != door_edge:
+					score += 20
+				elif edge != door_edge:
+					score += 5
+				score += _roll(cell.x * 3 + cell.y, edge.hash()) % 7
+				if score > best:
+					best = score
+					picked = canon
+		if picked != "":
+			_overrides[picked] = "door"
+
+
 func _exit(cell: Vector2i, edge: String) -> void:
 	_lift(_place(WALL, cell, edge))
-	var sign := LockedExit.new()
-	sign.position = _inner(cell, edge, 2.0, 0.08)
-	sign.rotation.y = _yaw_into(edge) + PI
-	add_child(sign)
+	var body := LockedExit.new()
+	body.built_in_leaf = false
+	# Local +Z points into the room, the same way Floor 4's red door faces the player.
+	body.position = _inner(cell, edge, 2.0, 0.0)
+	body.rotation.y = _face_into(edge)
+	add_child(body)
+	if OS.get_environment("F03_AUDIT") == "1":
+		print("exit ", body.global_position, " yaw ", body.rotation.y)
+	_red_exit_leaf(body)
+	_exit_label(body)
+
+
+func _red_exit_leaf(body: Node3D) -> void:
+	_ensure_exit_materials()
+	# Same proportions as Floor 4: brown frame, red leaf, metal handle. Bottom sits on the floor.
+	_local_box(body, Vector3(0.0, 1.14, 0.02), Vector3(1.5, 2.28, 0.04), _exit_frame)
+	_local_box(body, Vector3(0.0, 1.02, 0.05), Vector3(1.2, 2.04, 0.05), _exit_red)
+	_local_box(body, Vector3(0.46, 0.98, 0.09), Vector3(0.14, 0.035, 0.035), _exit_metal)
+
+
+func _exit_label(body: Node3D) -> void:
+	var sign := Label3D.new()
+	sign.name = "ExitSign"
+	sign.text = "EXIT"
+	# Above the leaf, matching Floor 4. +Z is the readable face and already points into the room.
+	sign.position = Vector3(0.0, 2.62, 0.06)
+	sign.pixel_size = 0.004
+	sign.font_size = 96
+	sign.modulate = Color(1.0, 0.18, 0.12)
+	sign.outline_modulate = Color(0.2, 0.0, 0.0)
+	sign.outline_size = 12
+	body.add_child(sign)
+
+
+func _hang_on_real_wall(id: String, packed: PackedScene, prefer: String, lift: float) -> bool:
+	var order: Array[String] = [prefer, _side_edge(prefer), _opposite(_side_edge(prefer)), _opposite(prefer)]
+	for edge in order:
+		for cell in _room_cells(id):
+			if not _is_wall_edge(cell, edge) or _is_door_edge(cell, edge):
+				continue
+			_mount_on_wall(packed, _inner(cell, edge, 2.0, 0.0), _face_into(edge), lift)
+			return true
+	return false
+
+
+func _kept_prop(node: Node3D, packed: PackedScene) -> void:
+	if packed == SHELF:
+		_stock_shelf(node)
+	elif packed == CABINET:
+		_finish_cabinet(node)
+
+
+func _stock_shelf(shelf: Node3D) -> void:
+	# Board tops on the Blendkit shelf, the same heights Floor 4 uses.
+	var stacks: Array[Vector3] = [Vector3(-0.28, 0.612, 0.0), Vector3(0.02, 0.956, 0.0), Vector3(-0.08, 1.301, 0.0)]
+	var yaws: Array[float] = [0.2, -0.3, 0.15]
+	for i in stacks.size():
+		var book := BOOKS.instantiate() as Node3D
+		book.position = stacks[i]
+		book.rotation.y = yaws[i]
+		shelf.add_child(book)
+		_tag(book, BOOKS)
+	var folder := FOLDER.instantiate() as Node3D
+	folder.position = Vector3(0.22, 0.612, 0.0)
+	folder.rotation.z = PI * 0.5
+	shelf.add_child(folder)
+	_tag(folder, FOLDER)
+
+
+func _finish_cabinet(cabinet: Node3D) -> void:
+	_ensure_cabinet_materials()
+	var pending: Array[Node] = [cabinet]
+	while not pending.is_empty():
+		var node: Node = pending.pop_back()
+		if node is MeshInstance3D:
+			var mesh_node := node as MeshInstance3D
+			mesh_node.material_override = _cab_drawer if _is_drawer_face(cabinet, mesh_node) else _cab_body
+		for child in node.get_children():
+			if child is StaticBody3D:
+				continue
+			pending.append(child)
+	var face_h := 0.385
+	var gap := 0.015
+	for i in 3:
+		var bottom := 0.09 + float(i) * (face_h + gap)
+		var y := bottom + face_h * 0.5
+		_local_box(cabinet, Vector3(0.0, y, 0.382), Vector3(0.40, face_h - 0.008, 0.016), _cab_drawer)
+		_local_box(cabinet, Vector3(0.0, bottom + face_h - 0.045, 0.394), Vector3(0.16, 0.016, 0.008), _cab_pull)
+
+
+func _is_drawer_face(cabinet: Node3D, mesh_node: MeshInstance3D) -> bool:
+	if mesh_node.mesh == null:
+		return false
+	var ab := mesh_node.get_aabb()
+	var to_cabinet := cabinet.global_transform.affine_inverse() * mesh_node.global_transform
+	var min_z := 1000.0
+	var max_z := -1000.0
+	for i in 8:
+		var corner := Vector3(
+			ab.position.x if (i & 1) == 0 else ab.end.x,
+			ab.position.y if (i & 2) == 0 else ab.end.y,
+			ab.position.z if (i & 4) == 0 else ab.end.z
+		)
+		var z := (to_cabinet * corner).z
+		min_z = minf(min_z, z)
+		max_z = maxf(max_z, z)
+	return max_z - min_z < 0.05 and max_z > 0.25
+
+
+func _ensure_cabinet_materials() -> void:
+	if _cab_body != null:
+		return
+	_cab_body = StandardMaterial3D.new()
+	_cab_body.albedo_color = Color(0.94, 0.94, 0.95)
+	_cab_body.metallic = 0.06
+	_cab_body.roughness = 0.48
+	_cab_drawer = StandardMaterial3D.new()
+	_cab_drawer.albedo_color = Color(0.78, 0.79, 0.8)
+	_cab_drawer.metallic = 0.02
+	_cab_drawer.roughness = 0.52
+	_cab_pull = StandardMaterial3D.new()
+	_cab_pull.albedo_color = Color(0.38, 0.39, 0.41)
+	_cab_pull.metallic = 0.55
+	_cab_pull.roughness = 0.35
+
+
+func _ensure_exit_materials() -> void:
+	if _exit_red != null:
+		return
+	_exit_red = StandardMaterial3D.new()
+	_exit_red.albedo_color = Color(0.45, 0.08, 0.07)
+	_exit_red.roughness = 0.55
+	_exit_frame = StandardMaterial3D.new()
+	_exit_frame.albedo_color = Color(0.32, 0.28, 0.25)
+	_exit_frame.roughness = 0.55
+	_exit_frame.metallic = 0.12
+	_exit_metal = StandardMaterial3D.new()
+	_exit_metal.albedo_color = Color(0.62, 0.64, 0.66)
+	_exit_metal.metallic = 0.72
+	_exit_metal.roughness = 0.28
+
+
+func _local_box(parent: Node3D, at: Vector3, size: Vector3, material: Material) -> void:
+	var mesh_node := MeshInstance3D.new()
+	var box := BoxMesh.new()
+	box.size = size
+	mesh_node.mesh = box
+	mesh_node.position = at
+	mesh_node.material_override = material
+	parent.add_child(mesh_node)
 
 
 func _spawn_player() -> void:
@@ -1208,6 +2206,7 @@ func _raw(packed: PackedScene, yaw: float) -> Node3D:
 	var node := packed.instantiate() as Node3D
 	node.rotation.y = yaw
 	add_child(node)
+	_tag(node, packed)
 	return node
 
 
@@ -1238,16 +2237,45 @@ func _half_along(node: Node3D, dir: Vector3) -> float:
 
 
 func _nudge_off_door(node: Node3D, edge: String, door_cell: Vector2i, door_edge: String) -> void:
-	if not _hits_door(node, door_cell, door_edge):
-		return
-	var slide := _side(edge)
-	var door_at := _inner(door_cell, door_edge, 2.0, 0.0)
-	if slide.dot(node.position - door_at) < 0.0:
-		slide = -slide
+	var along := _side(edge)
+	var into := _into(edge)
+	var id := str(_cells.get(door_cell, ""))
+	for _step in 14:
+		if not _hits_door(node, door_cell, door_edge):
+			return
+		var away := _push_from_doors(node, id, along)
+		var next := node.position + away
+		node.position = next
+		if id != "" and id != "hall" and not _foot_in_room(node, id):
+			node.position = next - away
+			break
 	for _step in 6:
 		if not _hits_door(node, door_cell, door_edge):
 			return
-		node.position += slide * 0.2
+		var next := node.position + into * 0.22
+		node.position = next
+		if id != "" and id != "hall" and not _foot_in_room(node, id):
+			node.position = next - into * 0.22
+			return
+
+
+func _push_from_doors(node: Node3D, id: String, along: Vector3) -> Vector3:
+	var center := _world_bounds(node).get_center()
+	var foot := Rect2(_world_bounds(node).position.x, _world_bounds(node).position.z, _world_bounds(node).size.x, _world_bounds(node).size.z)
+	var best := 999.0
+	var slide := along
+	var doors := _room_doors(id) if id != "" and id != "hall" else []
+	for door in doors:
+		var zone := _door_zone(door["cell"], str(door["edge"]))
+		if not foot.intersects(zone):
+			continue
+		var at := _inner(door["cell"], str(door["edge"]), 2.0, 0.0)
+		var delta := center - Vector3(at.x, center.y, at.z)
+		var dist := delta.length()
+		if dist < best:
+			best = dist
+			slide = along if delta.dot(along) >= 0.0 else -along
+	return slide * 0.3
 
 
 func _separate(node: Node3D, other: Node3D, edge: String) -> void:
@@ -1291,9 +2319,14 @@ func _deep_along(far: String) -> float:
 
 func _hits_door(node: Node3D, cell: Vector2i, edge: String) -> bool:
 	var box := _world_bounds(node)
-	var zone := _door_zone(cell, edge)
 	var foot := Rect2(box.position.x, box.position.z, box.size.x, box.size.z)
-	return foot.intersects(zone)
+	var id := str(_cells.get(cell, ""))
+	if id == "" or id == "hall":
+		return foot.intersects(_door_zone(cell, edge))
+	for door in _room_doors(id):
+		if foot.intersects(_door_zone(door["cell"], str(door["edge"]))):
+			return true
+	return false
 
 
 func _door_zone(cell: Vector2i, edge: String) -> Rect2:
@@ -1313,6 +2346,7 @@ func _on_desk(packed: PackedScene, desk: Node3D, local_offset: Vector3, yaw: flo
 	node.position = at
 	node.rotation.y = yaw
 	add_child(node)
+	_tag(node, packed)
 	var box := _local_aabb(node)
 	var factor := 1.0
 	if max_height > 0.0 and box.size.y > max_height:
@@ -1352,8 +2386,7 @@ func _seat(desk: Node3D, preferred: Vector3, packed: PackedScene, id: String, do
 func _place_chair(desk: Node3D, approach: Vector3, along: float, packed: PackedScene, id: String, door_cell: Vector2i, door_edge: String, blockers: Array[Node3D]) -> Node3D:
 	var chair := _spawn_chair(desk, approach, along, packed)
 	if not _foot_in_room(chair, id) or _hits_door(chair, door_cell, door_edge) or _hits_nodes(chair, blockers):
-		chair.name = "Rejected"
-		chair.queue_free()
+		_forget(chair)
 		return null
 	blockers.append(chair)
 	return chair
@@ -1388,6 +2421,16 @@ func _foot_in_room(node: Node3D, id: String) -> bool:
 	return true
 
 
+func _tight_hit(node: Node3D, others: Array[Node3D]) -> bool:
+	var box := _world_bounds(node).grow(-0.18)
+	for other in others:
+		if other == null or not is_instance_valid(other):
+			continue
+		if box.intersects(_world_bounds(other).grow(-0.18)):
+			return true
+	return false
+
+
 func _hits_nodes(node: Node3D, others: Array[Node3D]) -> bool:
 	var box := _world_bounds(node).grow(-0.03)
 	for other in others:
@@ -1414,6 +2457,7 @@ func _prop(packed: PackedScene, at: Vector3, yaw: float, max_height: float, max_
 	node.position = at
 	node.rotation.y = yaw
 	add_child(node)
+	_tag(node, packed)
 	var box := _local_aabb(node)
 	var factor := 1.0
 	if max_height > 0.0 and box.size.y > max_height:
@@ -1425,6 +2469,7 @@ func _prop(packed: PackedScene, at: Vector3, yaw: float, max_height: float, max_
 		node.scale = Vector3.ONE * factor
 	_sit(node)
 	_box_around(node)
+	_kept_prop(node, packed)
 	return node
 
 
@@ -1824,6 +2869,13 @@ func _write_report() -> void:
 	_report.append("rooms %d" % rooms)
 	_report.append("hall_cells %d" % hall_cells)
 	_report.append("reachable %d / %d" % [seen.size(), _cells.size()])
+	var one_door := 0
+	for id in ids.keys():
+		if str(ids[id]).ends_with("car") or str(id).begins_with("panel"):
+			continue
+		if _room_doors(str(id)).size() <= 1:
+			one_door += 1
+	_report.append("one_door %d" % one_door)
 	_report.append("dead %d tee %d cross %d corner %d straight %d" % [dead, tee, cross, corner, straight])
 	for kind in counts.keys():
 		_report.append("%s %d" % [str(kind), int(counts[kind])])
