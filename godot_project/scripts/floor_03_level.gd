@@ -1012,8 +1012,7 @@ func _furnish_restroom(id: String) -> void:
 		return
 	var toilet_cells: Array[Vector2i] = []
 	toilet_cells.assign(toilets_run["cells"])
-	var spots := _fixture_row(toilet_cells, 1.38, 0.32)
-	var occupied := _place_toilets(id, toilet_edge, spots)
+	var occupied := _place_toilets(id, toilet_edge, toilet_cells)
 	var toilet_count := occupied.size()
 	var bowls: Array[Vector3] = []
 	for node in occupied:
@@ -1115,89 +1114,111 @@ func _fixture_row(cells: Array[Vector2i], pitch: float, margin: float) -> Array[
 	return spots
 
 
-func _place_toilets(id: String, edge: String, spots: Array[Dictionary]) -> Array[Node3D]:
+func _place_toilets(id: String, edge: String, cells: Array[Vector2i]) -> Array[Node3D]:
+	# Same bowl, pitch, stall and door as Floor 4's toilet bank.
 	var scale := 1.48
-	var gap := 0.250 * scale + 0.06
-	var door_cell: Vector2i = _door_info(id)["cell"]
-	var door_edge := str(_door_info(id)["edge"])
+	var back := 0.250 * scale
+	var front := 0.369 * scale
+	var wall_clear := 0.06
+	var origin_gap := back + wall_clear
+	var door_from_wall := origin_gap + front + 0.42
+	var stall_depth := door_from_wall + 0.08
+	var box := _wall_bounds(cells)
+	var span0 := box.x
+	var span1 := box.y
+	if edge == "e" or edge == "w":
+		span0 = box.z
+		span1 = box.w
+	var door_at := _inner(_door_info(id)["cell"], str(_door_info(id)["edge"]), 2.0, 0.0)
+	var door_along := door_at.z if edge == "e" or edge == "w" else door_at.x
+	var low_pad := 0.24
+	var high_pad := 0.24
+	if absf(door_along - span0) < absf(door_along - span1):
+		low_pad = 0.96
+	else:
+		high_pad = 0.96
+	var run0 := span0 + low_pad
+	var run1 := span1 - high_pad
+	var count := maxi(int((run1 - run0) / 1.36), 1)
+	var pitch := (run1 - run0) / float(count)
 	var kept: Array[Node3D] = []
-	for spot in spots:
-		var cell: Vector2i = spot["cell"]
+	for i in count:
+		var along := run0 + (float(i) + 0.5) * pitch
 		var toilet := TOILET_MODEL.instantiate() as Node3D
-		toilet.position = _against(cell, edge, float(spot["along"]), gap)
+		toilet.position = _against_wall(edge, box, along, origin_gap)
 		toilet.rotation.y = _face_into(edge)
 		toilet.scale = Vector3(scale, scale, scale)
 		add_child(toilet)
 		_tag(toilet, TOILET_MODEL)
 		_box_around(toilet)
-		if not _foot_in_room(toilet, id) or _hits_door(toilet, door_cell, door_edge) or not _clear_of_doors(id, toilet.global_position, 1.45):
+		if not _foot_in_room(toilet, id):
 			_forget(toilet)
 			continue
 		kept.append(toilet)
-	if kept.size() >= 2:
-		_stalls(edge, kept, gap)
+		_stall_front(edge, box, along, pitch, door_from_wall)
+	for i in count + 1:
+		var along := run0 + float(i) * pitch
+		var mid := _against_wall(edge, box, along, wall_clear + stall_depth * 0.5)
+		var size := Vector3(stall_depth, 1.92, 0.04)
+		if edge == "n" or edge == "s":
+			size = Vector3(0.04, 1.92, stall_depth)
+		_world_box(Vector3(mid.x, 1.06, mid.z), size, _stall_white_ready())
 	return kept
 
 
-func _stalls(edge: String, toilets: Array[Node3D], gap: float) -> void:
-	_ensure_stall_material()
-	var into := _into(edge)
-	var side := _side(edge).normalized()
-	var ordered: Array[Node3D] = []
-	ordered.assign(toilets)
-	ordered.sort_custom(func(a: Node3D, b: Node3D) -> bool:
-		return a.global_position.dot(side) < b.global_position.dot(side)
-	)
-	var pitch := 1.3
-	if ordered.size() >= 2:
-		pitch = absf((ordered[1].global_position - ordered[0].global_position).dot(side))
-	var front := 0.369 * 1.48
-	var door_from_origin := front + 0.42
-	var stall_depth := gap + door_from_origin + 0.08
+func _stall_front(edge: String, box: Vector4, along: float, pitch: float, door_from_wall: float) -> void:
 	var opening := pitch - 0.04
 	var door_width := minf(0.78, opening - 0.16)
 	var flank := (opening - door_width) * 0.5
-	var yaw := _face_into(edge)
-	var leaf := Basis(Vector3.UP, yaw).x
-	for i in ordered.size() + 1:
-		var base: Node3D = ordered[mini(i, ordered.size() - 1)]
-		var coord := _stall_cut(ordered, side, i, pitch)
-		var at := base.global_position + side * (coord - base.global_position.dot(side))
-		at = at - into * gap + into * (stall_depth * 0.5)
-		at.y = 1.06
-		var size := Vector3(0.04, 1.92, stall_depth)
-		if absf(into.x) > 0.5:
-			size = Vector3(stall_depth, 1.92, 0.04)
-		_world_box(at, size, _stall_white)
-	for toilet in ordered:
-		var center := toilet.global_position + into * door_from_origin
-		center.y = 0.0
-		var hinge := center - leaf * (door_width * 0.5)
-		hinge.y = 0.0
-		_stall_door(hinge, yaw, door_width)
-		if flank > 0.04:
-			_stall_fill(center - leaf * (door_width * 0.5 + flank * 0.5), leaf, flank)
-			_stall_fill(center + leaf * (door_width * 0.5 + flank * 0.5), leaf, flank)
+	var bay0 := along - pitch * 0.5 + 0.02
+	var hinge_along := bay0 + flank
+	if edge == "w" or edge == "n":
+		hinge_along = bay0 + flank + door_width
+	var hinge := _against_wall(edge, box, hinge_along, door_from_wall)
+	_stall_door(hinge, _face_into(edge), door_width)
+	_stall_fill(edge, box, bay0 + flank * 0.5, flank - 0.02, door_from_wall)
+	var far := bay0 + flank + door_width
+	_stall_fill(edge, box, far + flank * 0.5, flank - 0.02, door_from_wall)
 
 
-func _stall_cut(ordered: Array[Node3D], side: Vector3, index: int, pitch: float) -> float:
-	if ordered.size() < 2:
-		var sign := -1.0 if index == 0 else 1.0
-		return ordered[0].global_position.dot(side) + sign * pitch * 0.5
-	if index == 0:
-		return ordered[0].global_position.dot(side) - (ordered[1].global_position - ordered[0].global_position).dot(side) * 0.5
-	if index == ordered.size():
-		var last := ordered.size() - 1
-		return ordered[last].global_position.dot(side) + (ordered[last].global_position - ordered[last - 1].global_position).dot(side) * 0.5
-	return (ordered[index - 1].global_position.dot(side) + ordered[index].global_position.dot(side)) * 0.5
+func _stall_fill(edge: String, box: Vector4, along: float, width: float, door_from_wall: float) -> void:
+	if width < 0.04:
+		return
+	var at := _against_wall(edge, box, along, door_from_wall)
+	var size := Vector3(0.04, 1.80, width)
+	if edge == "n" or edge == "s":
+		size = Vector3(width, 1.80, 0.04)
+	_world_box(Vector3(at.x, 1.02, at.z), size, _stall_white_ready())
 
 
-func _stall_fill(center: Vector3, along: Vector3, width: float) -> void:
-	center.y = 1.02
-	var size := Vector3(width, 1.80, 0.04)
-	if absf(along.z) > absf(along.x):
-		size = Vector3(0.04, 1.80, width)
-	_world_box(center, size, _stall_white)
+func _wall_bounds(cells: Array[Vector2i]) -> Vector4:
+	var x0 := 999.0
+	var x1 := -999.0
+	var z0 := 999.0
+	var z1 := -999.0
+	for cell in cells:
+		x0 = minf(x0, float(cell.x) * CELL)
+		x1 = maxf(x1, float(cell.x + 1) * CELL)
+		z0 = minf(z0, float(cell.y) * CELL)
+		z1 = maxf(z1, float(cell.y + 1) * CELL)
+	return Vector4(x0, x1, z0, z1)
+
+
+func _against_wall(edge: String, box: Vector4, along: float, gap: float) -> Vector3:
+	match edge:
+		"e":
+			return Vector3(box.y - 0.10 - gap, 0.0, along)
+		"w":
+			return Vector3(box.x + 0.10 + gap, 0.0, along)
+		"s":
+			return Vector3(along, 0.0, box.z + 0.10 + gap)
+		_:
+			return Vector3(along, 0.0, box.w - 0.10 - gap)
+
+
+func _stall_white_ready() -> Material:
+	_ensure_stall_material()
+	return _stall_white
 
 
 func _stall_door(at: Vector3, yaw: float, width: float) -> void:
