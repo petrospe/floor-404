@@ -79,6 +79,8 @@ var _exit_red: StandardMaterial3D
 var _exit_frame: StandardMaterial3D
 var _exit_metal: StandardMaterial3D
 var _stall_white: StandardMaterial3D
+var _stall_handle: StandardMaterial3D
+var _mirror_glass: StandardMaterial3D
 var _tile_floor: StandardMaterial3D
 var _tile_ns: StandardMaterial3D
 var _tile_ew: StandardMaterial3D
@@ -1013,6 +1015,9 @@ func _furnish_restroom(id: String) -> void:
 	var spots := _fixture_row(toilet_cells, 1.38, 0.32)
 	var occupied := _place_toilets(id, toilet_edge, spots)
 	var toilet_count := occupied.size()
+	var bowls: Array[Vector3] = []
+	for node in occupied:
+		bowls.append(node.global_position)
 	var sink_count := 0
 	for edge in EDGES:
 		if edge == toilet_edge:
@@ -1020,8 +1025,10 @@ func _furnish_restroom(id: String) -> void:
 		for run in _wall_runs(id, edge):
 			var sink_cells: Array[Vector2i] = []
 			sink_cells.assign(run)
+			if edge != _opposite(toilet_edge) and _run_on_cells(sink_cells, toilet_cells):
+				continue
 			var sink_spots := _fixture_row(sink_cells, 1.6, 0.34)
-			sink_count += _place_sinks(id, edge, sink_spots, occupied)
+			sink_count += _place_sinks(id, edge, sink_spots, occupied, bowls)
 	if OS.get_environment("F03_AUDIT") == "1":
 		print("restroom toilets ", toilet_count, " sinks ", sink_count, " edge ", toilet_edge, " run ", toilet_cells.size())
 	for door in _room_doors(id):
@@ -1078,6 +1085,13 @@ func _wall_runs(id: String, edge: String) -> Array:
 	return runs
 
 
+func _run_on_cells(run: Array[Vector2i], cells: Array[Vector2i]) -> bool:
+	for cell in run:
+		if cells.has(cell):
+			return true
+	return false
+
+
 func _run_continues(a: Vector2i, b: Vector2i, edge: String) -> bool:
 	if edge == "n" or edge == "s":
 		return a.y == b.y and absi(a.x - b.x) == 1
@@ -1128,7 +1142,7 @@ func _place_toilets(id: String, edge: String, spots: Array[Dictionary]) -> Array
 func _stalls(edge: String, toilets: Array[Node3D], gap: float) -> void:
 	_ensure_stall_material()
 	var into := _into(edge)
-	var side := _side(edge)
+	var side := _side(edge).normalized()
 	var ordered: Array[Node3D] = []
 	ordered.assign(toilets)
 	ordered.sort_custom(func(a: Node3D, b: Node3D) -> bool:
@@ -1137,25 +1151,53 @@ func _stalls(edge: String, toilets: Array[Node3D], gap: float) -> void:
 	var pitch := 1.3
 	if ordered.size() >= 2:
 		pitch = absf((ordered[1].global_position - ordered[0].global_position).dot(side))
-	var half := pitch * 0.5
-	var depth := 1.42
-	var thick := 0.04
+	var front := 0.369 * 1.48
+	var door_from_origin := front + 0.42
+	var stall_depth := gap + door_from_origin + 0.08
+	var opening := pitch - 0.04
+	var door_width := minf(0.78, opening - 0.16)
+	var flank := (opening - door_width) * 0.5
+	var yaw := _face_into(edge)
+	var leaf := Basis(Vector3.UP, yaw).x
 	for i in ordered.size() + 1:
 		var base: Node3D = ordered[mini(i, ordered.size() - 1)]
-		var shift := half if i == ordered.size() else -half
-		var at := base.global_position - into * gap + into * (depth * 0.5) + side * shift
-		at.y = 0.95
-		var size := Vector3(thick, 1.9, depth)
+		var coord := _stall_cut(ordered, side, i, pitch)
+		var at := base.global_position + side * (coord - base.global_position.dot(side))
+		at = at - into * gap + into * (stall_depth * 0.5)
+		at.y = 1.06
+		var size := Vector3(0.04, 1.92, stall_depth)
 		if absf(into.x) > 0.5:
-			size = Vector3(depth, 1.9, thick)
+			size = Vector3(stall_depth, 1.92, 0.04)
 		_world_box(at, size, _stall_white)
-	var width := maxf(pitch - 0.1, 0.7)
-	var yaw := _face_into(edge)
-	var hinge_side := Basis(Vector3.UP, yaw).x
 	for toilet in ordered:
-		var hinge := toilet.global_position - into * gap + into * depth - hinge_side * (width * 0.5)
+		var center := toilet.global_position + into * door_from_origin
+		center.y = 0.0
+		var hinge := center - leaf * (door_width * 0.5)
 		hinge.y = 0.0
-		_stall_door(hinge, yaw, width)
+		_stall_door(hinge, yaw, door_width)
+		if flank > 0.04:
+			_stall_fill(center - leaf * (door_width * 0.5 + flank * 0.5), leaf, flank)
+			_stall_fill(center + leaf * (door_width * 0.5 + flank * 0.5), leaf, flank)
+
+
+func _stall_cut(ordered: Array[Node3D], side: Vector3, index: int, pitch: float) -> float:
+	if ordered.size() < 2:
+		var sign := -1.0 if index == 0 else 1.0
+		return ordered[0].global_position.dot(side) + sign * pitch * 0.5
+	if index == 0:
+		return ordered[0].global_position.dot(side) - (ordered[1].global_position - ordered[0].global_position).dot(side) * 0.5
+	if index == ordered.size():
+		var last := ordered.size() - 1
+		return ordered[last].global_position.dot(side) + (ordered[last].global_position - ordered[last - 1].global_position).dot(side) * 0.5
+	return (ordered[index - 1].global_position.dot(side) + ordered[index].global_position.dot(side)) * 0.5
+
+
+func _stall_fill(center: Vector3, along: Vector3, width: float) -> void:
+	center.y = 1.02
+	var size := Vector3(width, 1.80, 0.04)
+	if absf(along.z) > absf(along.x):
+		size = Vector3(0.04, 1.80, width)
+	_world_box(center, size, _stall_white)
 
 
 func _stall_door(at: Vector3, yaw: float, width: float) -> void:
@@ -1169,10 +1211,11 @@ func _stall_door(at: Vector3, yaw: float, width: float) -> void:
 	body.set("open_angle_degrees", -85.0)
 	body.set("duration", 0.4)
 	add_child(body)
-	var height := 1.8
+	var height := 1.80
+	var thick := 0.04
 	var mesh_node := MeshInstance3D.new()
 	var box := BoxMesh.new()
-	box.size = Vector3(width, height, 0.04)
+	box.size = Vector3(width, height, thick)
 	mesh_node.mesh = box
 	mesh_node.position = Vector3(width * 0.5, 0.12 + height * 0.5, 0.0)
 	mesh_node.material_override = _stall_white
@@ -1183,9 +1226,16 @@ func _stall_door(at: Vector3, yaw: float, width: float) -> void:
 	shape.shape = collision
 	shape.position = mesh_node.position
 	body.add_child(shape)
+	var handle := MeshInstance3D.new()
+	var handle_box := BoxMesh.new()
+	handle_box.size = Vector3(0.11, 0.028, 0.018)
+	handle.mesh = handle_box
+	handle.position = Vector3(width - 0.09, 0.98, thick * 0.5 + 0.012)
+	handle.material_override = _stall_handle
+	body.add_child(handle)
 
 
-func _place_sinks(id: String, edge: String, spots: Array[Dictionary], occupied: Array[Node3D]) -> int:
+func _place_sinks(id: String, edge: String, spots: Array[Dictionary], occupied: Array[Node3D], bowls: Array[Vector3]) -> int:
 	var door_cell: Vector2i = _door_info(id)["cell"]
 	var door_edge := str(_door_info(id)["edge"])
 	var added := 0
@@ -1198,12 +1248,18 @@ func _place_sinks(id: String, edge: String, spots: Array[Dictionary], occupied: 
 		add_child(sink)
 		_tag(sink, SINK)
 		_box_around(sink)
-		if not _foot_in_room(sink, id) or _hits_door(sink, door_cell, door_edge) or _hits_nodes(sink, occupied) or not _clear_of_doors(id, sink.global_position, 1.35):
+		var beside_bowl := false
+		for bowl in bowls:
+			var flat := Vector2(sink.global_position.x, sink.global_position.z) - Vector2(bowl.x, bowl.z)
+			if flat.length() < 2.15:
+				beside_bowl = true
+				break
+		if beside_bowl or not _foot_in_room(sink, id) or _hits_door(sink, door_cell, door_edge) or _hits_nodes(sink, occupied) or not _clear_of_doors(id, sink.global_position, 1.35):
 			_forget(sink)
 			continue
 		occupied.append(sink)
 		added += 1
-		var mirror := _wall_hang(MIRROR, _against(cell, edge, along, 0.0), _face_into(edge), 1.62, 1.3)
+		var mirror := _wall_hang(MIRROR, _against(cell, edge, along, 0.0), _face_into(edge), 1.62, 1.6)
 		_tag_last(MIRROR)
 		_paint_black(mirror)
 	return added
@@ -1338,6 +1394,10 @@ func _ensure_stall_material() -> void:
 	_stall_white = StandardMaterial3D.new()
 	_stall_white.albedo_color = Color(0.95, 0.95, 0.94)
 	_stall_white.roughness = 0.4
+	_stall_handle = StandardMaterial3D.new()
+	_stall_handle.albedo_color = Color(0.74, 0.75, 0.78)
+	_stall_handle.roughness = 0.28
+	_stall_handle.metallic = 0.88
 
 
 func _ensure_tile_materials() -> void:
@@ -2558,15 +2618,21 @@ func _wall_hang(packed: PackedScene, at: Vector3, yaw: float, lift: float, scale
 
 
 func _paint_black(root: Node) -> void:
-	var glass := StandardMaterial3D.new()
-	glass.albedo_color = Color(0.012, 0.012, 0.014)
-	glass.roughness = 0.07
-	glass.metallic = 0.62
+	if _mirror_glass == null:
+		_mirror_glass = StandardMaterial3D.new()
+		_mirror_glass.albedo_color = Color(0.012, 0.012, 0.014)
+		_mirror_glass.roughness = 0.07
+		_mirror_glass.metallic = 0.62
+		_mirror_glass.cull_mode = BaseMaterial3D.CULL_DISABLED
 	var pending: Array[Node] = [root]
 	while not pending.is_empty():
 		var node: Node = pending.pop_back()
 		if node is MeshInstance3D:
-			(node as MeshInstance3D).material_override = glass
+			var mesh_node := node as MeshInstance3D
+			mesh_node.material_override = _mirror_glass
+			if mesh_node.mesh != null:
+				for surface in mesh_node.mesh.get_surface_count():
+					mesh_node.set_surface_override_material(surface, _mirror_glass)
 		for child in node.get_children():
 			pending.append(child)
 
