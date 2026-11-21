@@ -3,6 +3,7 @@
 [ext_resource type="Script" uid="uid://ck8km66nh7r8m" path="res://scripts/door.gd" id="1_door"]
 [ext_resource type="PackedScene" path="res://models/office/door_frame.glb" id="2_frame"]
 [ext_resource type="PackedScene" path="res://models/office/door_leaf.glb" id="3_leaf"]
+[ext_resource type="PackedScene" uid="uid://nronee77di11" path="res://models/blendkit/spherical_handle.glb" id="4_knob"]
 
 [sub_resource type="BoxShape3D" id="BoxShape3D_jamb"]
 size = Vector3(1.4, 3, 0.2)
@@ -20,13 +21,17 @@ roughness = 0.72
 [sub_resource type="BoxMesh" id="BoxMesh_seal"]
 size = Vector3(1.14, 2.28, 0.012)
 
-[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_handle"]
-albedo_color = Color(0.62, 0.63, 0.66, 1)
-metallic = 0.82
-roughness = 0.32
+[sub_resource type="Shader" id="Shader_hide_metal"]
+code = "shader_type spatial;
+render_mode blend_mix, depth_draw_never, cull_disabled, unshaded, shadows_disabled;
 
-[sub_resource type="BoxMesh" id="BoxMesh_handle"]
-size = Vector3(0.1, 0.1, 0.04)
+void fragment() {
+	ALPHA = 0.0;
+}
+"
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_hide_metal"]
+shader = SubResource("Shader_hide_metal")
 
 [node name="DoorFrame" type="Node3D"]
 
@@ -55,10 +60,14 @@ script = ExtResource("1_door")
 [node name="Leaf" parent="Door" instance=ExtResource("3_leaf")]
 transform = Transform3D(1.111111, 0, 0, 0, 1.026087, 0, 0, 0, 0.892857, -0.022222, -0.020522, -0.025)
 
-[node name="HandleBack" type="MeshInstance3D" parent="Door"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.02, 1.05, -0.07)
-mesh = SubResource("BoxMesh_handle")
-surface_material_override/0 = SubResource("StandardMaterial3D_handle")
+[node name="DoorLeaf" parent="Door/Leaf"]
+surface_material_override/1 = SubResource("ShaderMaterial_hide_metal")
+
+[node name="HandleFront" parent="Door" instance=ExtResource("4_knob")]
+transform = Transform3D(1.369595, 0, 0, 0, 1.369595, 0, 0, 0, 1.369595, 1.1, 1.036348, 0)
+
+[node name="HandleBack" parent="Door" instance=ExtResource("4_knob")]
+transform = Transform3D(-1.232632, 0, 0, 0, 1.232632, 0, 0, 0, -1.232632, 1.02, 1.05, -0.05)
 
 [node name="Seal" type="MeshInstance3D" parent="Door"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.6, 1.18, -0.02)

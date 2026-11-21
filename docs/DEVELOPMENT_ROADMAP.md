@@ -17,11 +17,12 @@ Audit date: 21 Nov 2026. Engine features in `project.godot`: Godot 4.7, Forward 
 | Floor graph | Verified in code. | `scripts/floor_registry.gd`. IDs `F01`–`F15`, `B1`, `B2`, `G`. Only `F03`, `F04`, and `F05` have scene paths. Other travel attempts log an error and do not change floors. |
 | Electrical panel | Verified in code. Playtest pending. | Eight wires. Pairing is a stable shuffle of `panel_id`. A correct seat stays while the UI is open. A wrong seat does not clear earlier seats. Esc discards an unfinished board. Completion calls `GameState.complete_panel`, turns the wall lamp green, activates the mapped elevator, and writes the save. A finished panel reopens read-only. |
 | Floor 4 panels and elevators | Verified in code. | `F04_DOWN_PANEL` / `F04_DOWN` toward Floor 3, `F04_UP_PANEL` / `F04_UP` toward Floor 5. The imported cabinet forwards E to the nearest panel. The 3D node is the status lamp. The puzzle is `scenes/ui/electrical_panel_ui.tscn`. |
-| Floor 3 | Verified by generator report from the current script. Playtest pending. | `scenes/floors/floor_03.tscn` runs `scripts/floor_03_level.gd`. Report written 18 Nov 2026, after that script's last edit: 85 rooms, 203 hall cells, 506/506 cells reachable, 2 non-panel one-door rooms. Both panels and both elevators are present. |
+| Floor 3 | Verified by generator report from the current script. Playtest pending. | `scenes/floors/floor_03.tscn` runs `scripts/floor_03_level.gd`. Report written 18 Nov 2026, after that script's last edit: 85 rooms, 203 hall cells, 506/506 cells reachable, 2 non-panel one-door rooms. Both panels and both elevators are present. Storage and utility ladders use the Blendkit ladder at its native size, the same as Floor 4 (1.84 m tall, 1.15 m deep). |
 | Floor 4 layout | Verified by reading the builder. Not a stored room count. | `scenes/office_level.tscn` runs `scripts/office_level.gd`. Static reconstruction of its cell and wall marks: 676 walkable cells (66 in the original south wing, 610 in the expansion), two elevator cars, one long corridor, and about 82 doorway-separated volumes. This is larger than the 65-room design target. Do not rebuild it to match that target. |
 | Floor 5 | Verified in code. It is a small prototype. | `scenes/floors/floor_05.tscn` uses `scripts/standard_floor.gd` with `floor_id = F05`. About 22 cells, two working elevators, two panels, one locked red EXIT. This is not the broken-elevator / stairwell floor in the new design. |
-| Movement and interaction | Verified in code. | `scripts/player.gd`. WASD, mouse look, E, no jump, no body mesh. Ray length 2.5 m. No interaction prompt. No InputMap `interact` action. |
-| Environmental storytelling | Not implemented. | No story catalog, reader UI, discovery list, or readable computers, papers, or wall messages. EXIT signs and elevator buttons already use `Label3D` with the readable face aimed into the room. |
+| Movement and interaction | Verified in code. | `scripts/player.gd`. WASD, mouse look, E, no jump, no body mesh. Ray length 2.5 m. No general interaction prompt. `E — Read` appears only while the ray is on a story entry. No InputMap `interact` action. |
+| Door knobs | Measured in Godot 4.7.2 and shown in a rendered close-up of both door faces. Not walked in play. | `models/blendkit/spherical_handle.glb` is the free Blendkit spherical handle. `scenes/modular/door_frame.tscn` uses it on both faces of the shared door (floors 3, 4, and 5). Stall bars and the red EXIT bars on floors 3 and 4 use the same mesh at the old handle's width. Leaf size, collision, and swing are unchanged. Floor 5's locked EXIT had no handle mesh. |
+| Environmental storytelling | Verified by a Godot 4.7.2 load of Floor 4 and rendered close-ups of all ten entries. | `scripts/story/`. Ten catalog ids, reader, prompt, and placements. Two story CRTs are opaque black with green text. The other 57 CRTs keep their original emission. |
 
 ## Do not rewrite
 - `scripts/office_level.gd` and `scenes/office_level.tscn` geometry, cabinet positions, panel IDs, and spawn markers.
@@ -40,7 +41,7 @@ Floor 4 still pairs its two shafts as one shared car for the door indicator. The
 Done as a file audit on 21 Nov 2026. The follow-up playtest list is still open.
 
 ## Phase 1 — Environmental storytelling pilot
-Implemented in code on 21 Nov 2026. Headless checks passed. A person has not yet walked the floor in the editor.
+Implemented on 21 Nov 2026. A headless load of Floor 4 and a rendered close-up of each entry passed the same day. A person has looked at the Ellis desk, the security CRT, and the service tag in play. This pass did not walk the eight-wire board or ride an elevator.
 
 Shipped:
 
@@ -62,7 +63,7 @@ Headless run of a temporary audit scene (removed after the run), Godot 4.7.2:
 - All ten readables were in the built Floor 4. A ray from the readable face hit that readable. None sat within 0.7 m of a panel, cabinet, elevator, or door node origin.
 - The nameplate's +Z points south, toward the approach from spawn.
 
-Not done: looking at the words in a window, confirming the cubicle mesh does not cover the nameplate, and pressing E on each entry with a mouse.
+A later run the same day rendered a close-up of every entry with the Forward+ renderer. The words were upright and inside their plates. The meeting-room lines were scaled down so they no longer ran past the plate. The Ellis and security tubes were black, with no desktop picture behind the green text. The other CRT materials still had emission enabled. Pressing E on each entry with a mouse, and walking the wire board, were not part of that run.
 
 ## Phase 2 — Expand and refine
 Not started.
@@ -82,4 +83,4 @@ Floors 1, 2, 6–15, both basements, and Ground Floor have registry slots and no
 - Continue returns to the floor of the latest repaired panel, at `ContinueSpawn`, not to the player's last coordinates.
 
 ## Suggested next task
-After approval: add the story data and reader, then place the Floor 4 pilot entries from a list of existing coordinates. Do not edit `office_level.gd`'s room construction to do it.
+Walk both Floor 4 wire boards and one elevator trip in play before adding floors or more story entries. Do not edit `office_level.gd`'s room construction for story placement.

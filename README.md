@@ -150,7 +150,7 @@ The registry still describes a Basement 2 master panel and a ground-floor trip. 
 
 ## What to build next
 
-1. Play the ten Floor 4 entries in the editor and confirm the words are readable.
+1. Walk both Floor 4 wire boards and one elevator trip. The ten story entries have rendered close-ups; that is not a substitute for pressing E on each one in play.
 2. Leave Floor 5 as the small prototype until its own phase.
 3. Add story entries to Floor 3 only after the Floor 4 pilot is accepted in play.
 4. Build later floors one at a time. Give them their own puzzles. Do not copy the wire board onto every floor.

@@ -77,9 +77,7 @@ var _cab_drawer: StandardMaterial3D
 var _cab_pull: StandardMaterial3D
 var _exit_red: StandardMaterial3D
 var _exit_frame: StandardMaterial3D
-var _exit_metal: StandardMaterial3D
 var _stall_white: StandardMaterial3D
-var _stall_handle: StandardMaterial3D
 var _mirror_glass: StandardMaterial3D
 var _tile_floor: StandardMaterial3D
 var _tile_ns: StandardMaterial3D
@@ -851,7 +849,8 @@ func _furnish_storage(id: String) -> void:
 	var side := _side_edge(far)
 	if _is_wall_edge(cell, side) and not _is_door_edge(cell, side):
 		blockers.append(_prop(CABINET, _inner(cell, side, 2.2, 0.45), _face_into(side), 1.3, 0.65))
-	var extra := _prop(COPIER, _centroid(id) + _into(far) * 0.4, _face_into(far), 1.15, 0.85) if _roll(_id_num(id), 2) % 2 == 0 else _prop(LADDER, _centroid(id), 0.4, 2.1, 0.65)
+	# Same Blendkit ladder size as Floor 4: the model's own 1.84 m height.
+	var extra := _prop(COPIER, _centroid(id) + _into(far) * 0.4, _face_into(far), 1.15, 0.85) if _roll(_id_num(id), 2) % 2 == 0 else _prop(LADDER, _centroid(id), 0.4, 0.0, 0.0)
 	if _off_doors(extra, id, blockers):
 		blockers.append(extra)
 	else:
@@ -865,7 +864,7 @@ func _furnish_utility(id: String) -> void:
 	var cell: Vector2i = _far_cell(id, far)
 	var blockers: Array[Node3D] = []
 	blockers.append(_prop(SHELF, _inner(cell, far, 2.0, 0.4), _face_into(far), 2.0, 1.1))
-	blockers.append(_prop(LADDER, _inner(cell, _side_edge(far), 2.4, 0.45), 0.6, 2.1, 0.65))
+	blockers.append(_prop(LADDER, _inner(cell, _side_edge(far), 2.4, 0.45), 0.6, 0.0, 0.0))
 	blockers.append(_prop(EXTINGUISHER, _inner(cell, _opposite(_side_edge(far)), 1.5, 0.3), 0.2, 0.7, 0.35))
 	var cabinet := _try_wall(CABINET, id, blockers)
 	if cabinet == null:
@@ -1247,13 +1246,7 @@ func _stall_door(at: Vector3, yaw: float, width: float) -> void:
 	shape.shape = collision
 	shape.position = mesh_node.position
 	body.add_child(shape)
-	var handle := MeshInstance3D.new()
-	var handle_box := BoxMesh.new()
-	handle_box.size = Vector3(0.11, 0.028, 0.018)
-	handle.mesh = handle_box
-	handle.position = Vector3(width - 0.09, 0.98, thick * 0.5 + 0.012)
-	handle.material_override = _stall_handle
-	body.add_child(handle)
+	DoorKnob.attach(body, Vector3(width - 0.09, 0.98, thick * 0.5), false, 0.11)
 
 
 func _place_sinks(id: String, edge: String, spots: Array[Dictionary], occupied: Array[Node3D], bowls: Array[Vector3]) -> int:
@@ -1415,10 +1408,6 @@ func _ensure_stall_material() -> void:
 	_stall_white = StandardMaterial3D.new()
 	_stall_white.albedo_color = Color(0.95, 0.95, 0.94)
 	_stall_white.roughness = 0.4
-	_stall_handle = StandardMaterial3D.new()
-	_stall_handle.albedo_color = Color(0.74, 0.75, 0.78)
-	_stall_handle.roughness = 0.28
-	_stall_handle.metallic = 0.88
 
 
 func _ensure_tile_materials() -> void:
@@ -2066,10 +2055,11 @@ func _exit(cell: Vector2i, edge: String) -> void:
 
 func _red_exit_leaf(body: Node3D) -> void:
 	_ensure_exit_materials()
-	# Same proportions as Floor 4: brown frame, red leaf, metal handle. Bottom sits on the floor.
+	# Same proportions as Floor 4: brown frame, red leaf. Bottom sits on the floor.
 	_local_box(body, Vector3(0.0, 1.14, 0.02), Vector3(1.5, 2.28, 0.04), _exit_frame)
 	_local_box(body, Vector3(0.0, 1.02, 0.05), Vector3(1.2, 2.04, 0.05), _exit_red)
-	_local_box(body, Vector3(0.46, 0.98, 0.09), Vector3(0.14, 0.035, 0.035), _exit_metal)
+	# Mount on the leaf face. The old bar was 0.14 m wide.
+	DoorKnob.attach(body, Vector3(0.46, 0.98, 0.075), false, 0.14)
 
 
 func _exit_label(body: Node3D) -> void:
@@ -2188,10 +2178,6 @@ func _ensure_exit_materials() -> void:
 	_exit_frame.albedo_color = Color(0.32, 0.28, 0.25)
 	_exit_frame.roughness = 0.55
 	_exit_frame.metallic = 0.12
-	_exit_metal = StandardMaterial3D.new()
-	_exit_metal.albedo_color = Color(0.62, 0.64, 0.66)
-	_exit_metal.metallic = 0.72
-	_exit_metal.roughness = 0.28
 
 
 func _local_box(parent: Node3D, at: Vector3, size: Vector3, material: Material) -> void:

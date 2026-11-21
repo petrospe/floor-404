@@ -450,7 +450,6 @@ func _stall_fill(edge: String, x0: float, x1: float, z0: float, z1: float, along
 
 
 func _stall_door(at: Vector3, yaw: float, width: float, white: Material) -> void:
-	var handle := _flat(Color(0.74, 0.75, 0.78), 0.28, 0.88)
 	var body := AnimatableBody3D.new()
 	body.name = "StallDoor"
 	body.position = at
@@ -475,7 +474,7 @@ func _stall_door(at: Vector3, yaw: float, width: float, white: Material) -> void
 	shape.shape = collision
 	shape.position = mesh_node.position
 	body.add_child(shape)
-	_bit(body, Vector3(width - 0.09, 0.98, thick * 0.5 + 0.012), Vector3(0.11, 0.028, 0.018), handle)
+	DoorKnob.attach(body, Vector3(width - 0.09, 0.98, thick * 0.5), false, 0.11)
 	add_child(body)
 
 

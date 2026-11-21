@@ -77,7 +77,7 @@ func _build_label() -> void:
 	label.text = world_text if world_text != "" else str(StoryCatalog.entry(entry_id).get("body", ""))
 	label.font_size = 42 if kind == "screen" or kind == "wall" else 28
 	var pixel := _pixel_size()
-	if kind == "sheet" or kind == "sticky" or kind == "screen":
+	if kind == "sheet" or kind == "sticky" or kind == "screen" or kind == "wall":
 		pixel = _fit_block(label.text, label.font_size, pixel)
 		label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	label.pixel_size = pixel

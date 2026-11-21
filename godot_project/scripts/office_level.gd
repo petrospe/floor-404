@@ -1186,7 +1186,8 @@ func _red_door(wall_face: Vector3) -> void:
 	_solid("RedFrame", wall_face + Vector3(0.0, 0.0, 0.01), Vector3(1.5, 2.28, 0.04), frame)
 	var center := wall_face + Vector3(0.0, 0.0, -depth * 0.5)
 	_solid("RedDoor", center, Vector3(1.2, 2.04, depth), _red_mat)
-	_solid("RedHandle", center + Vector3(0.46, -0.04, -depth * 0.5 - 0.025), Vector3(0.14, 0.035, 0.035), _metal_mat)
+	# The old bar was 0.14 m wide. The knob keeps that width and stays round.
+	DoorKnob.attach(_geometry, center + Vector3(0.46, -0.04, -depth * 0.5), true, 0.14)
 
 
 func _cooler(at: Vector3, yaw: float) -> void:
@@ -3659,7 +3660,6 @@ func _stall_fill(edge: String, x0: float, x1: float, z0: float, z1: float, along
 
 
 func _stall_door(at: Vector3, yaw: float, width: float, white: Material) -> void:
-	var handle := _mat(Color(0.74, 0.75, 0.78), 0.28, 0.88)
 	var body := AnimatableBody3D.new()
 	body.name = "StallDoor"
 	body.position = at
@@ -3684,7 +3684,7 @@ func _stall_door(at: Vector3, yaw: float, width: float, white: Material) -> void
 	shape.shape = collision
 	shape.position = mesh_node.position
 	body.add_child(shape)
-	_bit(body, Vector3(width - 0.09, 0.98, thick * 0.5 + 0.012), Vector3(0.11, 0.028, 0.018), handle)
+	DoorKnob.attach(body, Vector3(width - 0.09, 0.98, thick * 0.5), false, 0.11)
 	_geometry.add_child(body)
 
 
