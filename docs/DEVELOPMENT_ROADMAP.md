@@ -12,7 +12,7 @@ Audit date: 21 Nov 2026. Engine features in `project.godot`: Godot 4.7, Forward 
 
 | Area | Status | Evidence |
 |---|---|---|
-| Title, New Game, Continue | Verified in code. Playtest pending. | `scripts/title_screen.gd`. New Game resets state, erases `user://savegame.json`, loads `scenes/office_level.tscn`. Continue loads that save and travels to `last_activation_floor` at `ContinueSpawn`. |
+| Title, New Game, Continue | Verified in code. Playtest pending. | `scripts/title_screen.gd`. New Game resets state, erases `user://savegame.json`, loads `scenes/office_level.tscn`. Continue loads that save and travels to `current_floor` at `ContinueSpawn`. An older save without `current_floor` uses `last_activation_floor`. |
 | Save format | Verified in code. Playtest pending. | `scripts/save_manager.gd`, `scripts/game_state.gd`. Schema version 1. Atomic write through `savegame.tmp`. Unknown panel/elevator IDs are dropped. Partial wire state is not written. `game_completed` is stored and never set. |
 | Floor graph | Verified in code. | `scripts/floor_registry.gd`. IDs `F01`–`F15`, `B1`, `B2`, `G`. Only `F03`, `F04`, and `F05` have scene paths. Other travel attempts log an error and do not change floors. |
 | Electrical panel | Verified in code. Playtest pending. | Eight wires. Pairing is a stable shuffle of `panel_id`. A correct seat stays while the UI is open. A wrong seat does not clear earlier seats. Esc discards an unfinished board. Completion calls `GameState.complete_panel`, turns the wall lamp green, activates the mapped elevator, and writes the save. A finished panel reopens read-only. |
@@ -80,7 +80,7 @@ Floors 1, 2, 6–15, both basements, and Ground Floor have registry slots and no
 - Wrong wire keeps earlier seats. Esc on an unfinished panel clears them. A finished panel survives relaunch.
 - Repaired Floor 4 Down loads Floor 3 at `FromF04`. Repaired Floor 4 Up loads Floor 5 at `FromF04`. Floor 3 Up returns to Floor 4 at `FromF03`. Floor 5 Down returns to Floor 4 at `FromF05`.
 - Floor 3 Down and Floor 5 Up do not load a missing floor and do not corrupt the save.
-- Continue returns to the floor of the latest repaired panel, at `ContinueSpawn`, not to the player's last coordinates.
+- Continue returns to the floor that was loaded when the game last closed, at `ContinueSpawn`, not to the player's last coordinates. Closing the window writes that floor. Riding an elevator writes it too. An old save that has no `current_floor` still opens on the last repaired panel's floor.
 
 ## Suggested next task
 Walk both Floor 4 wire boards and one elevator trip in play before adding floors or more story entries. Do not edit `office_level.gd`'s room construction for story placement.

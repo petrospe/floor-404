@@ -56,10 +56,10 @@ The player can return to previously visited floors via the same floor graph, pro
 
 - **New Game:** reset progression and spawn on Floor 4 at its safe initial spawn marker.
 - **Autosave trigger:** successful completion of **any** panel, including the Master Panel. Save the completed panel ID, the newly activated elevator ID, and the floor where that panel was completed.
-- **Continue:** spawn on the **floor where the most recently completed panel was activated**, at a designated **safe continue spawn marker** (not the previous arbitrary position and not necessarily inside the elevator). This is the meaning of “last Elevator activation Floor”.
-- **No panels completed:** Continue defaults to the initial Floor 4 spawn.
-- **Revisits/backtracking:** completing a panel on a previously visited lower floor updates the Continue floor to that floor; it is **not** the numerically highest floor.
-- **Persist:** completed panel IDs, activated elevator IDs, last activation floor and panel ID, `game_completed`, schema version, and optional `discovered_entries`. Never persist partially connected wires. Nothing in the current scenes sets `game_completed`.
+- **Continue:** spawn on the **floor that was loaded when the game last closed**, at a designated **safe continue spawn marker** (not the previous arbitrary position and not necessarily inside the elevator). Closing the window writes `current_floor`. Arriving by elevator writes it too. A save with no `current_floor` still opens on `last_activation_floor`.
+- **No save yet:** Continue stays disabled. After a session has saved, a game that closed on Floor 4 with no repaired panel continues on Floor 4.
+- **Revisits/backtracking:** the Continue floor is the floor the player was on, not the numerically highest floor and not the last repaired panel.
+- **Persist:** completed panel IDs, activated elevator IDs, last activation floor and panel ID, current floor, `game_completed`, schema version, and optional `discovered_entries`. Never persist partially connected wires. Nothing in the current scenes sets `game_completed`.
 - **Save failures:** do not claim success; keep the game playable and expose a recoverable error. Write saves atomically and validate data on load.
 - **Hazard checkpoints** are temporary respawn locations and are **not** the Continue/save spawn. They do not trigger persistent saves.
 - **Story reads** also write the save. They add an id and leave the Continue floor where it was.
@@ -73,6 +73,7 @@ Example schema. The basement ids are registry keys for an unbuilt floor, shown s
   "activated_elevators": ["F04_UP"],
   "last_activation_floor": "F04",
   "last_activation_panel": "F04_UP_PANEL",
+  "current_floor": "F03",
   "game_completed": false,
   "discovered_entries": ["f04_ellis_terminal"]
 }

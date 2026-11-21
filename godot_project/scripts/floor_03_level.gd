@@ -85,6 +85,7 @@ var _tile_ew: StandardMaterial3D
 
 
 func _ready() -> void:
+	GameState.note_floor("F03")
 	_environment()
 	_carve_halls()
 	_reserve_anchors()

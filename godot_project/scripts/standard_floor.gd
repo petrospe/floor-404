@@ -51,6 +51,7 @@ var _flicker_energy: Array[float] = []
 
 
 func _ready() -> void:
+	GameState.note_floor(floor_id)
 	var spec: Dictionary = _spec(floor_id)
 	_build(spec)
 	FloorTransition.apply_pending_spawn(self)

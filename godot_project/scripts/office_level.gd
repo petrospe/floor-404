@@ -99,6 +99,7 @@ var _bottle_mat: StandardMaterial3D
 
 
 func _ready() -> void:
+	GameState.note_floor("F04")
 	_geometry = Node3D.new()
 	_geometry.name = "Geometry"
 	add_child(_geometry)

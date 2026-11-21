@@ -1,5 +1,5 @@
 extends Control
-## New Game starts on Floor 4. Continue returns to the last repaired panel's floor.
+## New Game starts on Floor 4. Continue returns to the floor that was open when the game last closed.
 
 
 func _ready() -> void:
@@ -53,6 +53,7 @@ func _button(text: String, top: float, callback: Callable) -> Button:
 func _new_game() -> void:
 	GameState.reset()
 	SaveManager.erase()
+	GameState.begin_session()
 	FloorTransition.arriving = false
 	FloorTransition.pending_marker = ""
 	get_tree().change_scene_to_file("res://scenes/office_level.tscn")
@@ -61,7 +62,5 @@ func _new_game() -> void:
 func _continue() -> void:
 	if not SaveManager.load_save():
 		return
-	var floor_id := GameState.last_activation_floor
-	if FloorRegistry.scene_path(floor_id) == "":
-		floor_id = "F04"
-	FloorTransition.go_to(floor_id, "ContinueSpawn")
+	GameState.begin_session()
+	FloorTransition.go_to(GameState.continue_floor(), "ContinueSpawn")

@@ -4,7 +4,7 @@
 
 The older subtitle "The Null Pointer" is a retired working title. A luminous Ground Floor ending is also retired. The ending is intentionally undecided. Narrative direction lives in `docs/`. Panel, elevator, and save behavior that is already in the scenes stays as implemented until a change is explicitly approved.
 
-> **Current build:** New Game starts on Floor 4. Floors 3 and 5 have scenes. An eight-wire panel repairs one elevator and autosaves. Continue returns to the floor of the last repaired panel. Floor 4 also has ten readable story entries. Floors 1, 2, 6–15, the basements, and any finale are not built. Floor 4 still pairs its two shafts for the door-present lamp. The cabin button itself loads the destination floor after that elevator's panel is repaired.
+> **Current build:** New Game starts on Floor 4. Floors 3 and 5 have scenes. An eight-wire panel repairs one elevator and autosaves. Continue returns to the floor that was open when the game last closed. Floor 4 also has ten readable story entries. Floors 1, 2, 6–15, the basements, and any finale are not built. Floor 4 still pairs its two shafts for the door-present lamp. The cabin button itself loads the destination floor after that elevator's panel is repaired.
 
 ## Documentation map — read before implementing
 

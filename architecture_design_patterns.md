@@ -98,11 +98,11 @@ Elevator button is inactive until `activated_elevators` contains its ID. **Do no
 
 ## 6. Save / Continue / respawn separation
 
-- **Persistent checkpoint:** latest *successful panel activation floor*, saved on disk; Continue uses that floor's safe Continue marker.
+- **Persistent checkpoint:** the floor loaded when the session last saved (`current_floor`). Continue uses that floor's safe Continue marker. `last_activation_floor` still records the latest repaired panel and is the fallback when `current_floor` is absent.
 - **Temporary hazard checkpoint:** latest `CheckpointZone` in the currently loaded scene; respawn only. Never overwrites the saved Continue floor.
 - **Scene arrival marker:** destination of a specific elevator transition; distinct from Continue marker.
-- If no panel was completed, New Game and Continue start at Floor 4.
-- After a completed panel on an earlier floor, that earlier floor becomes the latest Continue floor.
+- New Game starts at Floor 4. Continue starts on `current_floor`. With no `current_floor` in the file, it uses `last_activation_floor`.
+- Repairing a panel still records `last_activation_floor`. It does not by itself change the floor Continue will open.
 
 Suggested schema:
 
@@ -112,13 +112,14 @@ Suggested schema:
   "completed_panels": [],
   "activated_elevators": [],
   "last_activation_floor": "F04",
+  "current_floor": "F04",
   "last_activation_panel": "",
   "game_completed": false,
   "discovered_entries": []
 }
 ```
 
-`discovered_entries` is optional. A file that omits it loads with an empty list. Version stays 1. `note_discovery` appends one catalog id and writes this same object. It does not change `last_activation_floor`. Duplicate ids are skipped on load and on a second reading. Unknown ids are dropped. `last_activation_floor = F04` before any repair is a default, not evidence of an activated elevator. `game_completed` is stored and never set.
+`discovered_entries` and `current_floor` are optional. A file that omits discoveries loads with an empty list. A file that omits `current_floor` continues from `last_activation_floor`. Version stays 1. `note_discovery` appends one catalog id and writes this same object. It does not change `last_activation_floor` or `current_floor`. Duplicate ids are skipped on load and on a second reading. Unknown ids are dropped. `last_activation_floor = F04` before any repair is a default, not evidence of an activated elevator. `game_completed` is stored and never set.
 
 ## 7. Elevator travel
 
