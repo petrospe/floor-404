@@ -3,9 +3,11 @@ extends Node
 
 signal panel_completed(panel_id: String)
 signal elevator_activated(elevator_id: String)
+signal discovery_recorded(entry_id: String)
 
 var completed_panels: Array[String] = []
 var activated_elevators: Array[String] = []
+var discovered_entries: Array[String] = []
 var last_activation_floor := "F04"
 var last_activation_panel := ""
 var game_completed := false
@@ -22,9 +24,26 @@ func is_elevator_active(elevator_id: String) -> bool:
 func reset() -> void:
 	completed_panels.clear()
 	activated_elevators.clear()
+	discovered_entries.clear()
 	last_activation_floor = "F04"
 	last_activation_panel = ""
 	game_completed = false
+
+
+## Remember a catalog id. Does not move the Continue floor or touch panel progress.
+func note_discovery(entry_id: String) -> bool:
+	if entry_id == "" or discovered_entries.has(entry_id):
+		return discovered_entries.has(entry_id)
+	if not StoryCatalog.has_entry(entry_id):
+		push_warning("Floor 404 ignored unknown story entry %s" % entry_id)
+		return false
+	discovered_entries.append(entry_id)
+	if not SaveManager.write_save():
+		discovered_entries.erase(entry_id)
+		push_error("Floor 404 could not save story entry %s" % entry_id)
+		return false
+	discovery_recorded.emit(entry_id)
+	return true
 
 
 func complete_panel(panel_id: String) -> bool:
@@ -55,6 +74,7 @@ func to_dictionary() -> Dictionary:
 		"last_activation_floor": last_activation_floor,
 		"last_activation_panel": last_activation_panel,
 		"game_completed": game_completed,
+		"discovered_entries": discovered_entries.duplicate(),
 	}
 
 
@@ -84,3 +104,13 @@ func apply_dictionary(data: Dictionary) -> void:
 		last_activation_floor = "F04"
 	last_activation_panel = str(data.get("last_activation_panel", ""))
 	game_completed = bool(data.get("game_completed", false))
+	var found: Variant = data.get("discovered_entries", [])
+	if found is Array:
+		for item in found:
+			var entry_id := str(item)
+			if not StoryCatalog.has_entry(entry_id):
+				push_warning("Floor 404 ignored unknown story entry %s" % entry_id)
+				continue
+			if discovered_entries.has(entry_id):
+				continue
+			discovered_entries.append(entry_id)

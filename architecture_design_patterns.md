@@ -1,6 +1,8 @@
 # Floor 404 — Architecture & Design Patterns
 
-> **Status:** Target implementation architecture for Godot 4 / GDScript. Existing Level 4 gameplay must remain playable during migration. This document describes **what to build**, not what is already verified as implemented. All visual assets and scene transformations must comply with the mandatory Visual Orientation and Mirroring Rules defined in AGENTS.md.
+> **Status:** Godot 4.7 / GDScript. The services and the Floor 4 story pilot below are in the project. Unbuilt floors are still targets.  
+> **Narrative authority:** `docs/`. Panel, elevator, and save code stays as implemented until a change is approved.  
+> Text in the world uses positive scale. `Label3D` is read from its +Z face, aimed at the person standing in front of it.
 
 ## 1. Principles
 
@@ -13,40 +15,49 @@
 
 | Topic | Authoritative document |
 |---|---|
-| Player progression, panel rules, save semantics, ending | `gameplay_progression.md` |
-| Floor content, elevator counts, modular kit, atmosphere | `level_design_logic.md` |
-| Godot architecture, scene transitions, data contracts | This document |
-| Installation, current project files and run instructions | `README.md` |
+| Tone, ambiguity, ending direction | `docs/GAME_VISION.md`, `docs/STORY_AND_LORE.md` |
+| Future puzzles and floor themes | `docs/PUZZLE_DESIGN.md`, `docs/BUILDING_DESIGN.md` |
+| Implemented panel, elevator, and save rules | `gameplay_progression.md` and the scripts |
+| Grid, finished floors, Floor 5 prototype | `level_design_logic.md` |
+| Godot services and the story catalog | This document |
+| How to run the project | `README.md` |
 
-If existing prototype code contradicts a target gameplay rule, label it **LEGACY PROTOTYPE** and migrate it; do not rewrite the design to match the prototype.
+Where a finished scene disagrees with a future design target, keep the scene. Floor 4's shared door-lamp between its two shafts is one of those leftovers. The travel button still loads another floor.
 
 ## 3. Recommended scene/services layout (planned; confirm paths before creating)
 
 ```text
 godot_project/
-  project.godot
+  project.godot                 # Autoloads: FloorRegistry, GameState, SaveManager, FloorTransition
   scenes/
-    office_level.tscn           # Existing playable Floor 4 prototype
+    title.tscn                  # Main scene
+    office_level.tscn           # Floor 4
+    floors/floor_03.tscn
+    floors/floor_05.tscn        # Small prototype
     player.tscn
-    ground_floor_ending.tscn   # Planned
-    floors/                    # Planned separate scenes for other floors
-    modular/                   # Existing 4 m kit
-    ui/electrical_panel_ui.tscn # Planned
+    ui/electrical_panel_ui.tscn
+    modular/
   scripts/
-    player.gd                  # Existing
-    office_level.gd            # Existing
-    elevator_panel.gd          # Existing legacy prototype: migrate
-    elevator_doors.gd          # Existing
-    checkpoint_zone.gd         # Existing
-    hazard_zone.gd             # Existing
-    game_state.gd              # Planned Autoload
-    save_manager.gd            # Planned persistence service
-    floor_registry.gd          # Planned floor/elevator route data
-    floor_transition.gd        # Planned safe scene transfer
-    electrical_panel.gd        # Planned puzzle controller
+    player.gd
+    office_level.gd
+    floor_03_level.gd
+    standard_floor.gd           # Used by Floor 5. Its Floor 3 branch is unused
+    elevator_panel.gd           # Scene travel when elevator_id is set
+    elevator_doors.gd
+    electrical_panel.gd
+    electrical_panel_ui.gd
+    game_state.gd
+    save_manager.gd
+    floor_registry.gd
+    floor_transition.gd
+    story/story_catalog.gd
+    story/story_readable.gd
+    story/story_reader.gd
+    story/story_prompt.gd
+    story/floor_04_story.gd
 ```
 
-Paths are **recommendations** except where noted as existing. Inspect the actual repository and preserve its naming and resource paths before coding.
+There is no Ground Floor scene. Do not add one as part of a story change.
 
 ## 4. State ownership
 
@@ -101,18 +112,27 @@ Suggested schema:
   "completed_panels": [],
   "activated_elevators": [],
   "last_activation_floor": "F04",
-  "last_activation_panel": null,
-  "game_completed": false
+  "last_activation_panel": "",
+  "game_completed": false,
+  "discovered_entries": []
 }
 ```
 
-`last_activation_floor = F04` before any repair is a default, not evidence of an activated elevator.
+`discovered_entries` is optional. A file that omits it loads with an empty list. Version stays 1. `note_discovery` appends one catalog id and writes this same object. It does not change `last_activation_floor`. Duplicate ids are skipped on load and on a second reading. Unknown ids are dropped. `last_activation_floor = F04` before any repair is a default, not evidence of an activated elevator. `game_completed` is stored and never set.
 
-## 7. Elevator migration — required correction
+## 7. Elevator travel
 
-The README currently documents `scripts/elevator_panel.gd` as **“E rides to the other car”**. This is **LEGACY PROTOTYPE behavior** and must not be the final architecture. Replace it with real inter-floor scene transitions governed by persistent panel unlock state. The old two-cabins-on-one-floor behavior may remain only in a clearly marked test scene until migration completes.
+`ElevatorPanel` loads `FloorRegistry`'s destination scene when `elevator_id` is set and that elevator is in `activated_elevators`. An empty destination scene logs an error and does not travel. An empty `elevator_id` still runs the old same-floor cabin hop. Floor 4's buttons pass `F04_DOWN` and `F04_UP`, so those buttons change scenes.
 
-Do not label this migration complete until a repaired Floor 4 elevator can load a distinct destination floor scene, the destination spawn is safe, and Continue restores the activation floor after relaunch.
+Floor 4 also links the two door nodes as partners and parks one "car is here" lamp between them. That lamp logic is still the old paired-shaft behavior. Do not mix a story change into it.
+
+## 7b. Environmental storytelling
+
+Story text lives in `StoryCatalog`. `Floor04Story.install` runs at the end of Floor 4's `_ready` and adds readables without editing room marks. `StoryReadable` is a `StaticBody3D` with `interact()`, so the existing ray can hit it. Local +Z is the readable face. `StoryReader` is a `CanvasLayer` that suspends player input the way the wire board does, and closes on Esc. `StoryPrompt` draws `E — Read` only while the ray is on a readable and input is not suspended.
+
+A future journal can list `GameState.discovered_entries` in order and look up title, body, floor, and medium in the catalog. Do not add that screen in the pilot.
+
+Readable bodies must stay off doors, elevator plates, and the electrical cabinets. The cabinet script forwards E to the nearest panel within 7 m. A paper glued to the cabinet would steal that ray.
 
 ## 8. Interaction and audio
 
@@ -124,22 +144,28 @@ Do not label this migration complete until a repaired Floor 4 elevator can load 
 
 ## 9. AI coding agent rules
 
-1. Read all four `.md` files before proposing changes.
-2. Inspect real `.gd`/`.tscn` files and `project.godot`; do not claim a planned file already exists.
+1. Read `AGENTS.md`, `docs/`, and these root specs before proposing changes. `docs/` wins on story and ending. The scripts win on the panel, elevators, and save.
+2. Inspect real `.gd`/`.tscn` files and `project.godot` before claiming a file exists.
 3. State affected files and migration risks before editing; preserve Level 4 functionality.
 4. Use unique stable floor/panel/elevator IDs, not node display names, for saves.
 5. Never unlock an elevator without its panel (except the remote Master Panel's explicit link).
 6. Do not invent new routes, floors, UI rules, or endings when the specs are silent; flag the unresolved decision.
 7. Deliver incremental features with reproduction steps and acceptance tests.
 8. Prefer signals and a single state owner over scene-to-scene hard references.
-9. Test fresh save, incorrect wire, puzzle cancellation, successful panel, game restart, travel, backtracking, and ending.
+9. Test a fresh save, a wrong wire, puzzle cancellation, a finished panel, restart, travel between floors that exist, and a story read that does not move the Continue floor.
 
-## 10. Acceptance criteria for the architectural migration
+## 10. Acceptance criteria
 
-- Existing Floor 4 remains playable.
-- Save survives full application restart and preserves all repaired panels.
-- Partial puzzle state never survives closing its UI.
-- Elevator unlocks are per-transition and persist.
-- Floor 1 Ground Floor elevator unlocks only after Basement 2 Master Panel completion.
-- Travel changes to a distinct floor scene, never merely to another cabin on the same floor.
-- A missing floor resource or bad save produces safe fallback, not a soft lock or crash.
+Current build:
+
+- Floor 4 remains playable, including its two panels and both elevator trips.
+- Save survives a restart and keeps repaired panels.
+- Partial wire state never survives closing the board.
+- A repaired Floor 4 button loads Floor 3 or Floor 5. A missing destination scene does not travel and does not wipe the save.
+- Story discoveries reload, do not duplicate, and do not change the Continue floor.
+- A save written before `discovered_entries` still loads.
+
+Later, if those floors are built:
+
+- Floor 1's downward elevator stays locked until whatever endgame unlock is approved. The old Basement 2 master-panel link is only the registry's current placeholder.
+- Do not bring back a same-floor cabin hop as the travel button.

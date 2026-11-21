@@ -93,6 +93,10 @@ func travel_to(target: Transform3D) -> void:
 	reset_physics_interpolation()
 
 
+func is_input_suspended() -> bool:
+	return _input_suspended
+
+
 func set_input_suspended(suspended: bool) -> void:
 	_input_suspended = suspended
 	if suspended:

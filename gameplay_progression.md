@@ -1,11 +1,12 @@
 # Floor 404 — Gameplay Progression & Mechanics Specification
 
-> **Status:** Target design specification, not a claim that every feature is implemented.  
-> **Authority:** This file defines gameplay behavior. See `level_design_logic.md` for level content and `architecture_design_patterns.md` for implementation contracts.
+> **Status:** The panel, elevator, and save rules below match the current code for floors that have scenes. Unbuilt floors are still a target.  
+> **Narrative authority:** `docs/`. This file does not decide the ending or whether anyone in the building is simulated.  
+> **Level layout:** `level_design_logic.md`. **Code contracts:** `architecture_design_patterns.md`.
 
 ## 1. Core concept
 
-First-person liminal walking simulator, no monsters, weapons, traditional HUD, or visible player body. The player starts on **Floor 4**, explores a strange corporate complex, repairs electrical panels to activate elevators, reaches Floor 15 and the basements, then returns to Floor 1 to access the real exit on Ground Floor.
+First-person liminal walking simulator, no monsters, weapons, traditional HUD, or visible player body. The player starts on **Floor 4**. Repaired electrical panels unlock elevator trips between the floors that exist today: 3, 4, and 5. Later floors, basements, and an ending are not built. The story should leave the player's nature unresolved.
 
 Exploration is non-linear at the start: the player can discover an upward route (the route required for completion) or go down to Floor 1 first (an intentional dead end until the basement objective is completed). The game must never permanently soft-lock the player.
 
@@ -58,27 +59,39 @@ The player can return to previously visited floors via the same floor graph, pro
 - **Continue:** spawn on the **floor where the most recently completed panel was activated**, at a designated **safe continue spawn marker** (not the previous arbitrary position and not necessarily inside the elevator). This is the meaning of “last Elevator activation Floor”.
 - **No panels completed:** Continue defaults to the initial Floor 4 spawn.
 - **Revisits/backtracking:** completing a panel on a previously visited lower floor updates the Continue floor to that floor; it is **not** the numerically highest floor.
-- **Persist:** completed panel IDs, activated elevator IDs, last activation floor and panel ID, game completion flag, and schema version. Never persist partially connected wires.
+- **Persist:** completed panel IDs, activated elevator IDs, last activation floor and panel ID, `game_completed`, schema version, and optional `discovered_entries`. Never persist partially connected wires. Nothing in the current scenes sets `game_completed`.
 - **Save failures:** do not claim success; keep the game playable and expose a recoverable error. Write saves atomically and validate data on load.
 - **Hazard checkpoints** are temporary respawn locations and are **not** the Continue/save spawn. They do not trigger persistent saves.
-- **Completion:** entering the white light after opening the final Ground Floor door marks `game_completed = true` and triggers the end credits. How the main menu handles completed saves is a separate UX choice; do not erase progress automatically.
+- **Story reads** also write the save. They add an id and leave the Continue floor where it was.
 
-Example **illustrative schema** (IDs must match real floor registry IDs):
+Example schema. The basement ids are registry keys for an unbuilt floor, shown so the field names stay clear:
 
 ```json
 {
   "save_version": 1,
-  "completed_panels": ["F04_UP_PANEL", "B2_MASTER_PANEL"],
-  "activated_elevators": ["F04_UP", "F01_GROUND"],
-  "last_activation_floor": "B2",
-  "last_activation_panel": "B2_MASTER_PANEL",
-  "game_completed": false
+  "completed_panels": ["F04_UP_PANEL"],
+  "activated_elevators": ["F04_UP"],
+  "last_activation_floor": "F04",
+  "last_activation_panel": "F04_UP_PANEL",
+  "game_completed": false,
+  "discovered_entries": ["f04_ellis_terminal"]
 }
 ```
 
-## 6. Ground Floor ending
+## 6. Ending
 
-There is **no electrical panel on Ground Floor**. Once the Basement 2 Master Panel has been completed, Floor 1's Ground Floor elevator becomes available. The player arrives at a **huge, brightly illuminated hall** containing a **large luminous exit door**. The player opens the door, walks into **absolute white light**, and the **end credits** appear. The Ground Floor is a dedicated ending scene, not another maze or repair challenge.
+No ending scene is in the project. An earlier draft sent the player through Basement 2 to a bright Ground Floor hall, a luminous door, white light, and credits. That draft is retired. `docs/STORY_AND_LORE.md` keeps the ending undecided and forbids a literal "you are a simulation" reveal. The registry still has a `G` floor and a `B2_MASTER_PANEL` id so old route notes stay readable. Do not build that ending unless a new ending is approved.
+
+## 6b. Story discoveries
+
+Floor 4 has ten catalog entries in `scripts/story/story_catalog.gd`. Terminals, papers, and wall lines use the same E ray as doors. `E — Read` appears only while the ray is on one of them. Esc closes the reader.
+
+- The first reading of an id appends it to `discovered_entries` and writes the save.
+- A second reading opens the text again and does not store a duplicate.
+- The write does not change `last_activation_floor`, repaired panels, or activated elevators.
+- An open electrical board blocks the reader, and the reader does not clear or store wire seats.
+- Saves without `discovered_entries` load with an empty list.
+- There is no journal screen. The id list is the data a later journal would show.
 
 ## 7. Environmental gameplay
 
@@ -95,5 +108,6 @@ There is **no electrical panel on Ground Floor**. Once the Basement 2 Master Pan
 5. Floor 1 → Ground Floor remains disabled until the Basement 2 Master Panel is completed.
 6. Basement 2 has exactly one physical return elevator plus the Master Panel.
 7. No elevator trip travels to another cabin on the same floor as a substitute for changing floors.
-8. Ground Floor contains the hall, luminous door, whiteout, and credits, with no puzzle.
-9. Backtracking cannot erase progression; all mandatory routes are verified free of soft locks.
+8. No finale is required for the current build. Do not treat a white-light Ground Floor as shipped content.
+9. Backtracking cannot erase repaired panels. Story discoveries cannot erase them either.
+10. On Floor 4, each of the ten story entries can be read, and a save reload keeps those ids without moving the Continue floor.

@@ -1,17 +1,25 @@
-# Floor 404 — The Null Pointer
+# Floor 404
 
-**First-person liminal walking simulator** built with **Godot 4**. Inspired by the atmosphere of abandoned corporate spaces and dreamlike architectural repetition: no monsters, weapons, visible player body, or persistent HUD. The tension comes from isolation, repeating rooms, rain, lighting, and unsettling spatial design.
+**First-person liminal walking simulator** built with **Godot 4.7**. Tagline: **Reality Not Found.** No monsters, weapons, visible player body, or persistent HUD. The tension comes from an ordinary office after everyone else has gone, then from records and rooms that stop agreeing with each other.
 
-> **Important project status:** **Floor 4 is a working playable prototype.** The complete multi-floor progression, electrical-panel puzzle, persistent elevator unlocks, save/Continue system, Basement 2 Master Panel, and Ground Floor ending are **target features**. Do **not** mistake the current two-cabin same-floor elevator prototype for the final elevator mechanic.
+The older subtitle "The Null Pointer" is a retired working title. A luminous Ground Floor ending is also retired. The ending is intentionally undecided. Narrative direction lives in `docs/`. Panel, elevator, and save behavior that is already in the scenes stays as implemented until a change is explicitly approved.
+
+> **Current build:** New Game starts on Floor 4. Floors 3 and 5 have scenes. An eight-wire panel repairs one elevator and autosaves. Continue returns to the floor of the last repaired panel. Floor 4 also has ten readable story entries. Floors 1, 2, 6–15, the basements, and any finale are not built. Floor 4 still pairs its two shafts for the door-present lamp. The cabin button itself loads the destination floor after that elevator's panel is repaired.
 
 ## Documentation map — read before implementing
 
 | File | Purpose |
 |---|---|
-| [`gameplay_progression.md`](gameplay_progression.md) | **Authoritative gameplay rules**: floor route, panel puzzle, permanent unlocks, save/Continue, ending |
-| [`level_design_logic.md`](level_design_logic.md) | **Authoritative level rules**: 4 m grid, mandatory rooms, special floors, atmosphere |
-| [`architecture_design_patterns.md`](architecture_design_patterns.md) | **Target technical contracts**: Godot services, persistence, floor transitions, AI agent rules |
-| `README.md` | Repository entry point, existing prototype inventory, toolchain, workflow |
+| [`docs/GAME_VISION.md`](docs/GAME_VISION.md) | Current tone, pillars, and ending restraint |
+| [`docs/STORY_AND_LORE.md`](docs/STORY_AND_LORE.md) | Current narrative direction. Ambiguity is intentional |
+| [`docs/ENVIRONMENTAL_STORYTELLING.md`](docs/ENVIRONMENTAL_STORYTELLING.md) | Notes, terminals, wall text, and the pilot target |
+| [`docs/BUILDING_DESIGN.md`](docs/BUILDING_DESIGN.md) | Future floor targets. Do not rebuild a finished floor to match a target count |
+| [`docs/PUZZLE_DESIGN.md`](docs/PUZZLE_DESIGN.md) | Future puzzle variety. The existing eight-wire panel stays |
+| [`docs/DEVELOPMENT_ROADMAP.md`](docs/DEVELOPMENT_ROADMAP.md) | Verified progress and the next slice of work |
+| [`gameplay_progression.md`](gameplay_progression.md) | Implemented panel, elevator, and save rules, plus what is still unbuilt |
+| [`level_design_logic.md`](level_design_logic.md) | 4 m grid and the floors that exist |
+| [`architecture_design_patterns.md`](architecture_design_patterns.md) | Godot services, including the story catalog |
+| `README.md` | Entry point, toolchain, and how to run the current build |
 
 ## Toolchain
 
@@ -34,61 +42,53 @@ floor-404/
   gameplay_progression.md
   level_design_logic.md
   architecture_design_patterns.md
-  .cursorrules
-  floor404.code-workspace
+  docs/                         # Current creative direction
   godot_project/
-    project.godot
+    project.godot               # Main scene: scenes/title.tscn
     scenes/
-      office_level.tscn          # Existing playable Floor 4 prototype
-      test_level.tscn            # Existing test scene
+      title.tscn
+      office_level.tscn         # Floor 4
+      floors/floor_03.tscn
+      floors/floor_05.tscn      # Small two-panel prototype
       player.tscn
-      modular/                  # Existing 4 m kit
-      floors/                   # Planned
-      ground_floor_ending.tscn  # Planned
+      ui/electrical_panel_ui.tscn
+      modular/
     scripts/
-      office_level.gd           # Existing procedural Floor 4 builder
-      player.gd
-      elevator_doors.gd
-      elevator_panel.gd         # Existing LEGACY same-floor elevator prototype
-      interactable.gd
-      door.gd
-      checkpoint_zone.gd
-      hazard_zone.gd
-      ui/fade_overlay.gd
-      game_state.gd             # Planned
-      save_manager.gd           # Planned
-      floor_registry.gd         # Planned
-      floor_transition.gd       # Planned
-      electrical_panel.gd       # Planned
-  assets_src/                   # Optional editable source art
-  docs/                         # Optional supporting notes
+      game_state.gd             # Autoload
+      save_manager.gd           # Autoload
+      floor_registry.gd         # Autoload
+      floor_transition.gd       # Autoload
+      electrical_panel.gd
+      electrical_panel_ui.gd
+      story/                    # Catalog, reader, Floor 4 placements
 ```
 
-The `assets_src/` and `docs/` folders may need to be created; do not assume they exist. Godot's `.godot/` cache should not be committed.
+Godot's `.godot/` cache should not be committed.
 
 ## Opening and running the current prototype
 
 1. Open Godot's Project Manager and import `godot_project/project.godot`.
-2. The existing project documentation identifies `scenes/office_level.tscn` as the main scene. Verify the current `project.godot` setting before running.
-3. Press **F5** to play the office. To test the basic player scene, open `scenes/test_level.tscn` and press **F6**.
-4. Controls: **WASD** move, **Mouse** look, **E** interact, **Esc** release/recapture mouse. No jump or crouch.
-5. Existing `scripts/office_level.gd` procedurally builds the Level 4 office from modular assets. Do not discard this working scene when introducing other floors.
+2. The main scene is `scenes/title.tscn`.
+3. Press **F5**. New Game loads Floor 4. Continue loads `user://savegame.json` when that file exists.
+4. Controls: **WASD** move, **Mouse** look, **E** interact, **Esc** release/recapture mouse. No jump or crouch. Looking at a note, terminal, or wall line shows `E — Read`.
+5. `scripts/office_level.gd` builds Floor 4. `scripts/floor_03_level.gd` builds Floor 3. Do not regenerate either layout to match a target room count.
 
 ## What exists vs. what must change
 
-| Feature | Current documented state | Target state |
+| Feature | Current build | Still ahead |
 |---|---|---|
-| Floor 4 office | Playable prototype | Retain and integrate into full game |
-| First-person movement, interaction ray | Existing | Retain |
-| Doors and elevator door animations | Existing | Retain/reuse |
-| Elevator button travel | **LEGACY: transports player to the other cabin in the same floor** | **REPLACE: loads destination floor scene**, only after corresponding panel repair |
-| Checkpoint and hazard fade | Existing prototype | Retain as **temporary** respawn, separate from saved Continue |
-| Eight-pair electrical panel puzzles | Design specification | Implement and test |
-| Permanent elevator activation | Design specification | Implement via central state and autosave |
-| Multi-floor progression F01–F15, B1–B2 | Design specification | Implement per authoritative floor graph |
-| Ground Floor ending | Design specification | Implement luminous hall, exit door, white light, credits |
+| Floor 4 office | Playable. Story entries are added after the builder finishes | Keep the layout |
+| Floor 3 labyrinth | Built in code. Generator report: 85 rooms, fully reachable | Do not regenerate it |
+| Floor 5 | Small two-elevator prototype | Broken elevator and stairwell are a later phase |
+| Movement and E ray | In `player.gd` | — |
+| Eight-wire panel | In the cabinet UI. Correct seats stay until Esc. Completion autosaves | In-editor playtest of every wire case is still worth doing |
+| Elevator travel | A repaired button loads the destination scene | Floor 4's two shafts still share one "car is here" lamp |
+| Save / Continue | `user://savegame.json`, version 1, plus optional `discovered_entries` | — |
+| Floors 1–2, 6–15, basements | Registry ids only. Travel is refused | Build one floor at a time |
+| Ending | Not built. The old white-light Ground Floor ending is not the current story | Decide later |
+| Journal UI | Discovery ids are saved for it | Do not build the journal yet |
 
-**Critical correction:** The old phrase “E rides to the other car” describes a prototype, **not intended gameplay**. The final `elevator_panel.gd` must resolve an explicit destination floor, check the associated permanent unlock, load the destination scene, and spawn the player safely. This change must not be reported as already implemented.
+Floor 4's door script can still move the "car is here" lamp between its two shafts. That leftover is separate from the travel button, which loads Floor 3 or Floor 5 after the matching panel is repaired.
 
 ## Modular kit (existing convention)
 
@@ -110,7 +110,7 @@ The Godot modular kit includes carpet, concrete, ceiling, walls, windows, and li
 | `scripts/office_level.gd` | Runtime office floor construction |
 | `scripts/player.gd` | Character movement, camera, footsteps, interaction ray |
 | `scripts/elevator_doors.gd` | Sliding cabin doors |
-| `scripts/elevator_panel.gd` | **Legacy prototype**, requires inter-floor migration |
+| `scripts/elevator_panel.gd` | Loads the registered destination floor when the elevator id is set and repaired. An empty id still hops between two cabins |
 | `scripts/interactable.gd` | Interaction base |
 | `scripts/door.gd` | Hinged/sliding doors, locks, audio |
 | `scripts/checkpoint_zone.gd` | Temporary last safe transform |
@@ -136,25 +136,23 @@ Existing Blendkit props described in the original project include office and woo
 - Audacity: keep editable source projects outside Godot; export ambient fluorescent hum, HVAC, rain, thunder, footsteps by material, and door interaction sounds.
 - Surface names currently described: `carpet`, `tile`, `marble`, `concrete`, `water`, `metal`. Verify scene metadata/groups before changing footsteps.
 
-## Save system — design, not yet confirmed implemented
+## Save system — implemented
 
-- New Game starts Floor 4.
-- A completed eight-wire panel permanently activates its mapped elevator and **autosaves immediately**.
-- Continue starts at the **floor of the most recently completed panel** (last elevator activation floor), at a safe designated spawn point.
-- Wrong wire choices have unlimited retries and preserve earlier correct choices **while the UI remains open**; closing an incomplete puzzle resets it.
-- Partial puzzle connections and temporary hazard checkpoints are never saved.
-- The Basement 2 Master Panel remotely activates Floor 1 → Ground Floor; Ground Floor has **no panel** and is the ending.
+- New Game clears progression and starts on Floor 4.
+- Finishing an eight-wire panel activates its mapped elevator and writes the save.
+- Continue starts on the floor of the most recently completed panel, at that floor's `ContinueSpawn` marker.
+- Wrong wires leave earlier correct seats in place while the board is open. Esc discards an unfinished board. Partial wires are not written.
+- Reading a story entry appends its id to `discovered_entries` and writes the same save. That write does not change the Continue floor, repaired panels, or an open puzzle board.
+- A save from before `discovered_entries` existed still loads. Unknown story ids are ignored.
+- Reading the same entry again does not store a second copy.
 
-See `gameplay_progression.md` for full rules and `architecture_design_patterns.md` for save format and Godot integration.
+The registry still describes a Basement 2 master panel and a ground-floor trip. Those scenes are not built, and the old white-light ending is not the current narrative plan.
 
-## Migration order for developers and AI agents
+## What to build next
 
-1. Inspect current `project.godot`, scenes and scripts; capture a working Floor 4 baseline.
-2. Introduce stable floor/elevator/panel IDs and a floor registry; validate routes.
-3. Implement the electrical-panel puzzle with unlimited retries and cancellation reset.
-4. Implement central GameState and atomic save/Continue.
-5. Replace same-floor elevator teleport with safe cross-scene travel, retaining existing doors/animations.
-6. Build the remaining floors, Basement 2 Master Panel, and Ground Floor ending.
-7. Regression-test old movement/doors/footsteps/checkpoints and new persistence/route rules.
+1. Play the ten Floor 4 entries in the editor and confirm the words are readable.
+2. Leave Floor 5 as the small prototype until its own phase.
+3. Add story entries to Floor 3 only after the Floor 4 pilot is accepted in play.
+4. Build later floors one at a time. Give them their own puzzles. Do not copy the wire board onto every floor.
 
-Do not mark a planned feature “implemented” until tested in Godot. Do not silently invent rules when the design documents are explicit or unresolved.
+Do not mark a feature implemented until it has been tested in Godot. A headless scene load is not a playtest.

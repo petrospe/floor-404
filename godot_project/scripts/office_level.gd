@@ -62,6 +62,7 @@ const CABINET_LINK := preload("res://scripts/cabinet_panel_link.gd")
 const FLOOR_EXIT := preload("res://scripts/floor_exit.gd")
 const DOOR_SCRIPT := preload("res://scripts/door.gd")
 const OVERLAP := preload("res://scripts/overlap_resolver.gd")
+const STORY := preload("res://scripts/story/floor_04_story.gd")
 
 var _cells: Array[Vector2i] = []
 var _cell_set: Dictionary = {}
@@ -108,6 +109,7 @@ func _ready() -> void:
 	_build_lights()
 	_build_props()
 	_progression_hooks()
+	STORY.install(self)
 
 
 func _process(_delta: float) -> void:

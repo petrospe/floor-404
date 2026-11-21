@@ -1,5 +1,6 @@
 extends Node
 ## Atomic JSON save. Partial wire puzzles and hazard checkpoints are never written.
+## discovered_entries is optional. Saves written before that field still load.
 
 const SAVE_PATH := "user://savegame.json"
 const TMP_PATH := "user://savegame.tmp"

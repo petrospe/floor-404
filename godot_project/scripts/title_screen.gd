@@ -21,7 +21,7 @@ func _ready() -> void:
 	title.offset_bottom = 220
 	add_child(title)
 	var line := Label.new()
-	line.text = "The Null Pointer"
+	line.text = "Reality Not Found"
 	line.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	line.add_theme_font_size_override("font_size", 18)
 	line.add_theme_color_override("font_color", Color(0.7, 0.68, 0.62))

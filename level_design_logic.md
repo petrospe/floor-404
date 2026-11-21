@@ -1,6 +1,7 @@
 # Floor 404 — Level Design Logic & Modular Architecture
 
-> **Status:** Target level design. Gameplay rules are defined in `gameplay_progression.md`; technical interfaces in `architecture_design_patterns.md`.
+> **Status:** The 4 m grid is the building standard. Floor 3 and Floor 4 are finished layouts. Floor 5 is a small prototype. Room counts in `docs/BUILDING_DESIGN.md` are targets for unbuilt floors.  
+> **Narrative:** `docs/`. Do not rebuild a finished floor to match a new theme.
 
 ## 1. Grid and modular kit — fixed convention
 
@@ -40,11 +41,21 @@ Ordinary floors **2–14** contain:
 
 ### Floor 4 — Starting floor
 
-First playable/tutorial floor. Existing Godot scene `scenes/office_level.tscn` is the **working prototype**; preserve it while migrating to multi-floor logic. Two elevators (UP to 5, DOWN to 3), two local panel rooms, recognizable office areas, and a safe New Game spawn. Do not replace this with a new scene without compatibility checks.
+Playable office in `scenes/office_level.tscn`, built by `scripts/office_level.gd`. Two elevators (UP to 5, DOWN to 3), two local panel rooms, and the New Game spawn at the south end of the corridor. A static reconstruction of the builder counted 676 walkable cells, which is larger than the 65-room design target. Leave the geometry in place.
+
+The protagonist's desk is the front-middle cubicle already in the south bay, at `(2.1, 0, 43.5)`. Story placement adds a screen, a note, and a nameplate there. It does not move the spawn. The other eight Floor 4 texts are placed by `scripts/story/floor_04_story.gd` after the builder finishes.
 
 ### Floor 1 — Exit gateway
 
 Two elevator cabins: UP → Floor 2, activated by **one local panel**; DOWN → Ground Floor, activated **only by the remote Basement 2 Master Panel**. There is **no second local panel** for the Ground Floor elevator. The Ground Floor button is initially red and remains so until Master Panel completion.
+
+### Floor 5 — Current prototype, future stairwell
+
+`scenes/floors/floor_05.tscn` is a compact carpet floor with two working elevators and two panels. Keep it. The broken-elevator and stairwell idea in `docs/BUILDING_DESIGN.md` is a later phase, not this scene.
+
+### Floor 3 — Built labyrinth
+
+`scenes/floors/floor_03.tscn` runs `scripts/floor_03_level.gd`. The generator's report from the current script lists 85 rooms and a fully reachable plan. `scripts/standard_floor.gd` still contains an unused Floor 3 sketch. The live scene does not use it.
 
 ### Floor 15 — Zenith
 
@@ -58,9 +69,9 @@ Two elevators: RETURN → Floor 15 and DOWN → Basement 2, each with a local pa
 
 Industrial concrete, pipes, darkness. Exactly **one physical elevator**, returning to Basement 1, activated by its own local panel. A **separate Master Panel** unlocks Floor 1 → Ground Floor remotely. No elevator directly from Basement 2 to Floor 15 or Ground Floor.
 
-### Ground Floor — Ending scene
+### Ending scene
 
-No panels, false exits, or extra maze. A very large bright hall appears when the elevator opens; a monumental luminous exit door is interactable. Opening it reveals absolute white light; entering triggers the credits. Keep ending sequence visually distinct from all dark office floors. Use a dedicated scene (suggested: `scenes/ground_floor_ending.tscn`, planned path, not confirmed existing).
+Not built. Do not add `scenes/ground_floor_ending.tscn` as a white-light credits hall unless an ending is approved. See `docs/STORY_AND_LORE.md`.
 
 ## 5. Floor graph and spatial safety
 
