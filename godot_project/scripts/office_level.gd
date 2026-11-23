@@ -1058,11 +1058,29 @@ func _extra_rooms() -> void:
 	_seat(Vector3(-14.0, 0.0, 114.0), "n", 0.0, "swivel")
 	_seat(Vector3(-14.0, 0.0, 114.0), "w", 0.0, "swivel")
 	# Bay interior is x 20.1–31.9, z 184.1–199.9. The west door swings to about x 21.1.
+	# Facing south, a stall runs from 0.05 m behind its origin to 1.814 m in front of it.
+	# The four aisles match. The north end is a walkway, and the south end stays wide
+	# enough for the corner cabinet plus another walkway.
 	var bay_x: Array[float] = [22.3, 24.6, 26.9, 29.2]
-	var bay_z: Array[float] = [184.7, 187.5, 191.6, 194.9, 198.0]
-	for z in bay_z:
+	const stall_front := 1.814
+	const stall_back := 0.05
+	const bay_south := 184.1
+	const bay_north := 199.9
+	const south_clear := 1.37
+	const north_clear := 0.95
+	const bay_rows := 5
+	var occupied := stall_front + stall_back
+	var aisle := (bay_north - bay_south - south_clear - north_clear - float(bay_rows) * occupied) / float(bay_rows - 1)
+	var z := bay_south + south_clear + stall_front
+	for _row in bay_rows:
 		for x in bay_x:
-			_cubicle(Vector3(x, 0.0, z))
+			_cubicle(Vector3(x, 0.0, z), PI)
+		z += occupied + aisle
+	# Southeast corner. Drawers face west. The cabinet is 0.45 m along the south
+	# wall, so the passage in front of it stays about 0.90 m.
+	var cabinet := Vector3(31.512, 0.0, 184.343)
+	_filing_cabinet(cabinet, -PI * 0.5)
+	_cabinet_spots.append(cabinet)
 
 
 func _build_elevators() -> void:
@@ -2948,6 +2966,8 @@ func _plant_room(cell: Vector2i) -> bool:
 	if not _expansion.has(cell) and cell.y >= 17:
 		return false
 	if cell.x >= 5 and cell.x <= 7 and cell.y >= 40 and cell.y <= 43:
+		return false
+	if cell.x >= 5 and cell.x <= 7 and cell.y >= 46 and cell.y <= 49:
 		return false
 	if cell.x >= -6 and cell.x <= -5 and cell.y >= 24 and cell.y <= 26:
 		return false

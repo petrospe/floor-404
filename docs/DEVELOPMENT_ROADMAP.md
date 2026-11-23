@@ -12,12 +12,12 @@ Audit date: 21 Nov 2026. Engine features in `project.godot`: Godot 4.7, Forward 
 
 | Area | Status | Evidence |
 |---|---|---|
-| Title, New Game, Continue | Verified in code. Playtest pending. | `scripts/title_screen.gd`. New Game resets state, erases `user://savegame.json`, loads `scenes/office_level.tscn`. Continue loads that save and travels to `current_floor` at `ContinueSpawn`. An older save without `current_floor` uses `last_activation_floor`. |
-| Save format | Verified in code. Playtest pending. | `scripts/save_manager.gd`, `scripts/game_state.gd`. Schema version 1. Atomic write through `savegame.tmp`. Unknown panel/elevator IDs are dropped. Partial wire state is not written. `game_completed` is stored and never set. |
+| Title, New Game, Continue | Verified in code. Headless run 23 Nov 2026. Not windowed. | `scripts/title_screen.gd`. New Game resets state, erases `user://savegame.json`, loads `scenes/office_level.tscn`. Continue loads that save and travels to `current_floor` at `ContinueSpawn`. An older save without `current_floor` uses `last_activation_floor`. |
+| Save format | Verified in code. Headless run 23 Nov 2026. Not windowed. | `scripts/save_manager.gd`, `scripts/game_state.gd`. Schema version 1. Atomic write through `savegame.tmp`. Unknown panel/elevator IDs are dropped. Partial wire state is not written. `game_completed` is stored and never set. |
 | Floor graph | Verified in code. | `scripts/floor_registry.gd`. IDs `F01`–`F15`, `B1`, `B2`, `G`. Only `F03`, `F04`, and `F05` have scene paths. Other travel attempts log an error and do not change floors. |
-| Electrical panel | Verified in code. Playtest pending. | Eight wires. Pairing is a stable shuffle of `panel_id`. A correct seat stays while the UI is open. A wrong seat does not clear earlier seats. Esc discards an unfinished board. Completion calls `GameState.complete_panel`, turns the wall lamp green, activates the mapped elevator, and writes the save. A finished panel reopens read-only. |
+| Electrical panel | Verified in code. Headless run 23 Nov 2026. Not windowed. | Eight wires. Pairing is a stable shuffle of `panel_id`. A correct seat stays while the UI is open. A wrong seat does not clear earlier seats. Esc discards an unfinished board. Completion calls `GameState.complete_panel`, turns the wall lamp green, activates the mapped elevator, and writes the save. A finished panel reopens read-only. |
 | Floor 4 panels and elevators | Verified in code. | `F04_DOWN_PANEL` / `F04_DOWN` toward Floor 3, `F04_UP_PANEL` / `F04_UP` toward Floor 5. The imported cabinet forwards E to the nearest panel. The 3D node is the status lamp. The puzzle is `scenes/ui/electrical_panel_ui.tscn`. |
-| Floor 3 | Verified by generator report from the current script. Playtest pending. | `scenes/floors/floor_03.tscn` runs `scripts/floor_03_level.gd`. Report written 18 Nov 2026, after that script's last edit: 85 rooms, 203 hall cells, 506/506 cells reachable, 2 non-panel one-door rooms. Both panels and both elevators are present. Storage and utility ladders use the Blendkit ladder at its native size, the same as Floor 4 (1.84 m tall, 1.15 m deep). |
+| Floor 3 | Verified by generator report from the current script. Arrival and return exercised headless on 23 Nov 2026. Rooms not walked. | `scenes/floors/floor_03.tscn` runs `scripts/floor_03_level.gd`. Report written 18 Nov 2026, after that script's last edit: 85 rooms, 203 hall cells, 506/506 cells reachable, 2 non-panel one-door rooms. Both panels and both elevators are present. Storage and utility ladders use the Blendkit ladder at its native size, the same as Floor 4 (1.84 m tall, 1.15 m deep). |
 | Floor 4 layout | Verified by reading the builder. Not a stored room count. | `scenes/office_level.tscn` runs `scripts/office_level.gd`. Static reconstruction of its cell and wall marks: 676 walkable cells (66 in the original south wing, 610 in the expansion), two elevator cars, one long corridor, and about 82 doorway-separated volumes. This is larger than the 65-room design target. Do not rebuild it to match that target. |
 | Floor 5 | Verified in code. It is a small prototype. | `scenes/floors/floor_05.tscn` uses `scripts/standard_floor.gd` with `floor_id = F05`. About 22 cells, two working elevators, two panels, one locked red EXIT. This is not the broken-elevator / stairwell floor in the new design. |
 | Movement and interaction | Verified in code. | `scripts/player.gd`. WASD, mouse look, E, no jump, no body mesh. Ray length 2.5 m. No general interaction prompt. `E — Read` appears only while the ray is on a story entry. No InputMap `interact` action. |
@@ -65,8 +65,29 @@ Headless run of a temporary audit scene (removed after the run), Godot 4.7.2:
 
 A later run the same day rendered a close-up of every entry with the Forward+ renderer. The words were upright and inside their plates. The meeting-room lines were scaled down so they no longer ran past the plate. The Ellis and security tubes were black, with no desktop picture behind the green text. The other CRT materials still had emission enabled. Pressing E on each entry with a mouse, and walking the wire board, were not part of that run.
 
+## Gameplay regression — 23 Nov 2026
+Headless integration run on Godot 4.7.2. A temporary scene drove the live title buttons, cabinet ray, panel UI, elevator travel, and save file, then the scene was removed. No gameplay script or floor layout was changed. The player's existing `user://savegame.json` was copied aside and restored afterward (Continue floor remained `F05`).
+
+Result: 0 failures. This was not a windowed playtest. Nobody looked at the rendered frame, walked with the mouse, or dragged a wire by hand.
+
+Automated checks that passed:
+
+- Project import, every script under `res://scripts`, and every scene, glb, png, and jpg under `res://scenes` and `res://models` loaded. No missing resource and no script error.
+- New Game on the title screen starts on Floor 4 with no save. Both panels are incomplete and both elevator lamps are red. Each cabinet opens its own panel.
+- On the Floor 4 down board, a wrong socket leaves the board empty. A correct seat stays when the next socket is wrong. Drag seats the next wire without clearing the first. Esc closes an unfinished board and does not write it. Reopening starts empty with the same pairing. Finishing the board turns that lamp green, activates only `F04_DOWN`, and saves the panel, the elevator, and the ten story ids. The up elevator stays inactive. Reopening the finished board is read-only, and Esc leaves the save in place.
+- Floor 4 down loads Floor 3 with the player at `FromF04`, on a floor, input restored, and the save floor set to `F03`.
+- An unrepaired Floor 3 down does not travel and does not rewrite the save. After `F03_DOWN_PANEL` is solved, the button still stays on Floor 3 because Floor 2 has no scene. The log line `elevator F03_DOWN has no destination scene` is the expected refusal. The save bytes are unchanged.
+- Continue from the title loads Floor 3 at `ContinueSpawn` with the panels and all ten story ids.
+- Floor 3 up loads Floor 4 at `FromF03`. Floor 4 up then loads Floor 5 at `FromF04`. Both Floor 4 elevators stay active together.
+- Solved Floor 5 up stays on Floor 5. The log line `elevator F05_UP has no destination scene` is the expected refusal for Floor 6, and the save is unchanged. Floor 5 down loads Floor 4 at `FromF05`.
+- All ten Floor 4 readables have face text, a positive scale, a floor in front of the face, and a ray that hits that readable. Their collision does not overlap a panel, elevator, door, cabinet, or Floor 4 spawn capsule. Opening each one shows the catalog title and body, appends the id once, and does not change the floor or the panels. Reading the first id again does not duplicate it.
+- New Game after that progress deletes the save and clears panels and discoveries. The close notification then writes schema version 1 with floor `F04` and empty lists, and that file loads.
+- An in-memory save with no `discovered_entries` kept its real panel and elevator. Unknown panel, elevator, and story ids were dropped. A `current_floor` of `F02` fell back to `F04` without dropping the panel.
+
+The only warnings were those three unknown-id drops, produced on purpose by the harness.
+
 ## Phase 2 — Expand and refine
-Not started.
+Not started. Do not start it on the strength of the headless run.
 
 1. Add a smaller set of entries to Floor 3 without editing its generator's layout.
 2. Measure furnishing cost and navigation on the existing floors before adding props.
@@ -75,12 +96,12 @@ Not started.
 ## Later phases
 Floors 1, 2, 6–15, both basements, and Ground Floor have registry slots and no scenes. Build them one floor at a time, each with its own puzzle idea, after the Floor 4 story pilot is accepted. Keep the ending ambiguous until an ending is explicitly chosen.
 
-## Playtest still required
-- Fresh game: both Floor 4 buttons stay inactive until their own panel is finished.
-- Wrong wire keeps earlier seats. Esc on an unfinished panel clears them. A finished panel survives relaunch.
-- Repaired Floor 4 Down loads Floor 3 at `FromF04`. Repaired Floor 4 Up loads Floor 5 at `FromF04`. Floor 3 Up returns to Floor 4 at `FromF03`. Floor 5 Down returns to Floor 4 at `FromF05`.
-- Floor 3 Down and Floor 5 Up do not load a missing floor and do not corrupt the save.
-- Continue returns to the floor that was loaded when the game last closed, at `ContinueSpawn`, not to the player's last coordinates. Closing the window writes that floor. Riding an elevator writes it too. An old save that has no `current_floor` still opens on the last repaired panel's floor.
+## Graphical confirmation still open
+The 23 Nov 2026 run did not open a window. Still worth doing by hand before any new floor or story work:
+
+- Look at both Floor 4 wire boards. Correct seats should stay visibly connected, and a wrong plug should not pull them off.
+- Walk the ten Floor 4 texts and confirm the words are upright and readable. Confirm a note does not catch the player in a doorway.
+- Ride Floor 4 down to Floor 3 and Floor 4 up to Floor 5, and ride both back. Confirm the fade and the landing spot.
 
 ## Suggested next task
-Walk both Floor 4 wire boards and one elevator trip in play before adding floors or more story entries. Do not edit `office_level.gd`'s room construction for story placement.
+Leave Phase 2 unstarted. The headless regression passed. A windowed look at the wire boards, the ten texts, and one round trip each way is the remaining check. Do not edit `office_level.gd` or `floor_03_level.gd` for that look.
